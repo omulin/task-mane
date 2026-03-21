@@ -1,26 +1,187 @@
-@import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+  background: #eef1f6;
+}
+
+.container {
+  display: grid;
+  grid-template-columns: 260px 1fr 260px;
+  gap: 16px;
+  padding: 16px;
+}
+
+.card {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+
+  /* ↓これ追加 */
+  max-height: 300px;
+  overflow-y: auto;
+}
+.card-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tab {
+  background: #e2e6ed;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.tab.active {
+  background: #5b8bd8;
+  color: white;
+}
+
+.input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.button {
+  width: 100%;
+  padding: 8px;
+  background: linear-gradient(#6ea0e6, #4a7ed1);
+  color: white;
+  border: none;
+  border-radius: 8px;
+}
+
+.task {
+  background: #e9edf3;
+  padding: 10px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status {
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.todo { background: #dcdcdc; }
+.doing { background: #5b8bd8; color: white; }
+.done { background: #4caf50; color: white; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.board-column {
+  background: #eef2f7;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.task-card {
+  background: white;
+  padding: 8px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.dashboard-bar {
+  height: 8px;
+  background: #dcdcdc;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.dashboard-fill {
+  height: 100%;
+  background: #5b8bd8;
+  width: 65%;
+}
+
+.gantt-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.gantt-bar {
+  height: 10px;
+  background: #5b8bd8;
+  border-radius: 6px;
+  margin-left: 8px;
+}
+
+.history {
+  margin-top: 10px;
+}
+
+.history-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.history-tab {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #e2e6ed;
+  font-size: 12px;
+}
+
+.history-tab.active {
+  background: #5b8bd8;
+  color: white;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.history-bar {
+  height: 10px;
+  background: #5b8bd8;
+  border-radius: 6px;
+}
+
+.history-right {
+  position: relative;
+}
+
+.history-right::before {
+  content: "";
+  position: absolute;
+  left: 30%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #ddd;
+}
+
+.history-right::after {
+  content: "";
+  position: absolute;
+  left: 65%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #ddd;
 }
