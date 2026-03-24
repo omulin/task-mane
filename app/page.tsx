@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 export default function Home() {
+  const { data: session } = useSession();
+
   const [tasks, setTasks] = useState<any[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newStart, setNewStart] = useState("");
@@ -22,14 +25,17 @@ export default function Home() {
   const createTask = async () => {
     if (!newTitle) return;
 
-    await fetch("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({
-        title: newTitle,
-        startDate: newStart,
-        endDate: newEnd,
-      }),
-    });
+   await fetch("/api/tasks", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    title: newTitle,
+    startDate: newStart,
+    endDate: newEnd,
+  }),
+});
 
     setNewTitle("");
     setNewStart("");
@@ -75,17 +81,31 @@ export default function Home() {
       {/* 上段 */}
       <div style={{ display: "flex", gap: 12, height: "35%" }}>
 
+        {/* 🔥 ログインだけ変更 */}
         <div className="card" style={{ flex: 1 }}>
           <div className="card-title">支援管理システム</div>
           <div className="tabs">
             <div className="tab active">利用者</div>
             <div className="tab">スタッフ</div>
           </div>
-          <input className="input" placeholder="ユーザーID" />
-          <input className="input" placeholder="パスワード" />
-          <button className="button">ログイン</button>
+
+          {!session ? (
+            <button className="button" onClick={() => signIn("google")}>
+              Googleでログイン
+            </button>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, marginBottom: 8 }}>
+                {session.user?.email}
+              </div>
+              <button className="button" onClick={() => signOut()}>
+                ログアウト
+              </button>
+            </>
+          )}
         </div>
 
+        {/* 中央：リスト */}
         <div className="card" style={{ flex: 2, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div className="tabs">
             <div className="tab active">リスト</div>
@@ -137,7 +157,6 @@ export default function Home() {
 
           <div style={{ fontSize: 20, fontWeight: "bold" }}>{progress}%</div>
 
-          {/* 進行バー */}
           <div style={{ height: 8, background: "#eee", borderRadius: 4 }}>
             <div style={{ width: `${progress}%`, background: "#4a90e2", height: "100%", borderRadius: 4 }} />
           </div>
@@ -190,16 +209,11 @@ export default function Home() {
 
           <div style={{ display: "flex" }}>
             <div style={{ width: 80 }} />
-            {["日","月","火","水","木","金","土"].map((d, i) => {
-              const date = new Date(startOfWeek);
-              date.setDate(startOfWeek.getDate() + i);
-
-              return (
-                <div key={d} style={{ flex: 1, textAlign: "center" }}>
-                  {d}
-                </div>
-              );
-            })}
+            {["日","月","火","水","木","金","土"].map((d, i) => (
+              <div key={d} style={{ flex: 1, textAlign: "center" }}>
+                {d}
+              </div>
+            ))}
           </div>
 
           {tasks.map((t) => {

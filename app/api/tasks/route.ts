@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../auth/[...nextauth]/route";
 
 // 一覧取得
 export async function GET() {
@@ -9,9 +11,33 @@ export async function GET() {
   return Response.json(tasks);
 }
 
-// 作成
+// 作成（🔥ここ修正）
 export async function POST(req: Request) {
   const body = await req.json();
+
+  // 🔥ログインユーザー取得
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Not logged in" }, { status: 401 });
+  }
+
+  // 🔥DBにユーザーいるか確認
+  let user = await prisma.users.findUnique({
+    where: { email: session.user.email },
+  });
+
+  // 🔥いなければ作る（ここ重要）
+  if (!user) {
+    user = await prisma.users.create({
+      data: {
+        name: session.user.name || "no-name",
+        email: session.user.email,
+        password: "google",
+        role: "USER",
+      },
+    });
+  }
 
   const task = await prisma.tasks.create({
     data: {
@@ -19,10 +45,9 @@ export async function POST(req: Request) {
       status: "TODO",
       approval: "PENDING",
 
-      assigneeId: 1,
-      createdById: 1,
+      assigneeId: user.id,
+      createdById: user.id,
 
-      // 🔥 ここ重要（上書きしない）
       startDate: body.startDate ? new Date(body.startDate) : null,
       endDate: body.endDate ? new Date(body.endDate) : null,
 
@@ -44,7 +69,7 @@ export async function DELETE(req: Request) {
   return Response.json({ ok: true });
 }
 
-// 更新（ステータス変更）
+// 更新
 export async function PUT(req: Request) {
   const body = await req.json();
 
