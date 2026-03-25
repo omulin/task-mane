@@ -2,11 +2,32 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 
-// 一覧取得
 export async function GET() {
-  const tasks = await prisma.tasks.findMany({
-    orderBy: { id: "desc" },
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json([], { status: 401 });
+  }
+
+  const user = await prisma.users.findUnique({
+    where: { email: session.user.email },
   });
+
+  if (!user) return Response.json([]);
+
+  let tasks;
+
+  // 🔥 ここが追加ポイント（権限分け）
+  if (user.role === "STAFF") {
+    tasks = await prisma.tasks.findMany({
+      orderBy: { id: "desc" },
+    });
+  } else {
+    tasks = await prisma.tasks.findMany({
+      where: { createdById: user.id },
+      orderBy: { id: "desc" },
+    });
+  }
 
   return Response.json(tasks);
 }
