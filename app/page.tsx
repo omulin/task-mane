@@ -11,6 +11,7 @@ export default function Home() {
   const [newStart, setNewStart] = useState("");
   const [newEnd, setNewEnd] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [userId, setUserId] = useState<number | null>(null);
 
   const fetchTasks = () => {
     fetch("/api/tasks")
@@ -22,20 +23,28 @@ export default function Home() {
     fetchTasks();
   }, []);
 
+  useEffect(() => {
+    if (!session) return;
+
+    fetch("/api/me")
+      .then((res) => res.json())
+      .then((data) => setUserId(data?.id ?? null));
+  }, [session]);
+
   const createTask = async () => {
     if (!newTitle) return;
 
-   await fetch("/api/tasks", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    title: newTitle,
-    startDate: newStart,
-    endDate: newEnd,
-  }),
-});
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: newTitle,
+        startDate: newStart,
+        endDate: newEnd,
+      }),
+    });
 
     setNewTitle("");
     setNewStart("");
@@ -72,15 +81,22 @@ export default function Home() {
   });
 
   const progress = Math.round(
-    (tasks.filter(t => t.status === "DONE").length / (tasks.length || 1)) * 100
+    (tasks.filter((t) => t.status === "DONE").length / (tasks.length || 1)) * 100
   );
 
   return (
-    <div className="container" style={{ height: "100vh", overflow: "hidden", display: "flex", flexDirection: "column", gap: 12 }}>
-
+    <div
+      className="container"
+      style={{
+        height: "100vh",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
       {/* 上段 */}
       <div style={{ display: "flex", gap: 12, height: "35%" }}>
-
         {/* 🔥 ログインだけ変更 */}
         <div className="card" style={{ flex: 1 }}>
           <div className="card-title">支援管理システム</div>
@@ -106,7 +122,10 @@ export default function Home() {
         </div>
 
         {/* 中央：リスト */}
-        <div className="card" style={{ flex: 2, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div
+          className="card"
+          style={{ flex: 2, display: "flex", flexDirection: "column", overflow: "hidden" }}
+        >
           <div className="tabs">
             <div className="tab active">リスト</div>
             <div className="tab">ボード</div>
@@ -121,12 +140,22 @@ export default function Home() {
           />
 
           <div style={{ display: "flex", gap: 6 }}>
-            <input type="date" value={newStart} onChange={(e) => setNewStart(e.target.value)} />
+            <input
+              type="date"
+              value={newStart}
+              onChange={(e) => setNewStart(e.target.value)}
+            />
             <span>〜</span>
-            <input type="date" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} />
+            <input
+              type="date"
+              value={newEnd}
+              onChange={(e) => setNewEnd(e.target.value)}
+            />
           </div>
 
-          <button className="button" onClick={createTask}>追加</button>
+          <button className="button" onClick={createTask}>
+            追加
+          </button>
 
           <div style={{ overflowY: "auto", flex: 1 }}>
             {tasks.map((task) => (
@@ -134,12 +163,19 @@ export default function Home() {
                 {task.title}
 
                 <div style={{ fontSize: 11, color: "#666" }}>
-                  {task.startDate && task.endDate &&
-                    `${new Date(task.startDate).getMonth()+1}/${new Date(task.startDate).getDate()}〜${new Date(task.endDate).getMonth()+1}/${new Date(task.endDate).getDate()}`
-                  }
+                  {task.startDate &&
+                    task.endDate &&
+                    `${new Date(task.startDate).getMonth() + 1}/${new Date(
+                      task.startDate
+                    ).getDate()}〜${new Date(task.endDate).getMonth() + 1}/${new Date(
+                      task.endDate
+                    ).getDate()}`}
                 </div>
 
-                <select value={task.status} onChange={(e) => updateStatus(task.id, e.target.value)}>
+                <select
+                  value={task.status}
+                  onChange={(e) => updateStatus(task.id, e.target.value)}
+                >
                   <option value="TODO">未入力</option>
                   <option value="DOING">進行中</option>
                   <option value="DONE">完了</option>
@@ -158,27 +194,32 @@ export default function Home() {
           <div style={{ fontSize: 20, fontWeight: "bold" }}>{progress}%</div>
 
           <div style={{ height: 8, background: "#eee", borderRadius: 4 }}>
-            <div style={{ width: `${progress}%`, background: "#4a90e2", height: "100%", borderRadius: 4 }} />
+            <div
+              style={{
+                width: `${progress}%`,
+                background: "#4a90e2",
+                height: "100%",
+                borderRadius: 4,
+              }}
+            />
           </div>
 
-          未入力 {tasks.filter(t => t.status === "TODO").length}<br/>
-          進行中 {tasks.filter(t => t.status === "DOING").length}<br/>
-          完了 {tasks.filter(t => t.status === "DONE").length}
+          未入力 {tasks.filter((t) => t.status === "TODO").length}
+          <br />
+          進行中 {tasks.filter((t) => t.status === "DOING").length}
+          <br />
+          完了 {tasks.filter((t) => t.status === "DONE").length}
         </div>
-
       </div>
 
       {/* 中段 */}
       <div style={{ display: "flex", gap: 12, height: "35%" }}>
-
         {/* 今日のタスク */}
         <div className="card" style={{ flex: 1, overflowY: "auto" }}>
           <div className="card-title">今日のタスク</div>
 
           {todayTasks.length === 0 && (
-            <div style={{ fontSize: 12, color: "#888" }}>
-              今日のタスクなし
-            </div>
+            <div style={{ fontSize: 12, color: "#888" }}>今日のタスクなし</div>
           )}
 
           {todayTasks.map((t) => (
@@ -192,12 +233,16 @@ export default function Home() {
         <div className="card" style={{ flex: 2 }}>
           <div className="card-title">ボード</div>
           <div className="board">
-            {["TODO","DOING","DONE"].map((s) => (
+            {["TODO", "DOING", "DONE"].map((s) => (
               <div key={s} className="board-column">
                 <div>{s}</div>
-                {tasks.filter(t => t.status===s).map(t => (
-                  <div key={t.id} className="task-card">{t.title}</div>
-                ))}
+                {tasks
+                  .filter((t) => t.status === s)
+                  .map((t) => (
+                    <div key={t.id} className="task-card">
+                      {t.title}
+                    </div>
+                  ))}
               </div>
             ))}
           </div>
@@ -209,7 +254,7 @@ export default function Home() {
 
           <div style={{ display: "flex" }}>
             <div style={{ width: 80 }} />
-            {["日","月","火","水","木","金","土"].map((d, i) => (
+            {["日", "月", "火", "水", "木", "金", "土"].map((d, i) => (
               <div key={d} style={{ flex: 1, textAlign: "center" }}>
                 {d}
               </div>
@@ -224,16 +269,21 @@ export default function Home() {
             const span = end - start + 1;
 
             return (
-              <div key={t.id} style={{ display: "flex", alignItems: "center", height: 30 }}>
+              <div
+                key={t.id}
+                style={{ display: "flex", alignItems: "center", height: 30 }}
+              >
                 <div style={{ width: 80 }}>{t.title}</div>
                 <div style={{ flex: 1, position: "relative" }}>
-                  <div style={{
-                    position: "absolute",
-                    left: `${(start / 7) * 100}%`,
-                    width: `${(span / 7) * 100}%`,
-                    height: 6,
-                    background: "#4a90e2"
-                  }} />
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: `${(start / 7) * 100}%`,
+                      width: `${(span / 7) * 100}%`,
+                      height: 6,
+                      background: "#4a90e2",
+                    }}
+                  />
                 </div>
               </div>
             );
@@ -245,12 +295,14 @@ export default function Home() {
           <div className="card-title">カレンダー</div>
 
           <div style={{ display: "flex" }}>
-            {["日","月","火","水","木","金","土"].map((d, i) => (
+            {["日", "月", "火", "水", "木", "金", "土"].map((d, i) => (
               <div key={d} style={{ flex: 1 }}>
                 <div>{d}</div>
                 {tasks
-                  .filter(t => t.startDate && new Date(t.startDate).getDay() === i)
-                  .map(t => (
+                  .filter(
+                    (t) => t.startDate && new Date(t.startDate).getDay() === i
+                  )
+                  .map((t) => (
                     <div key={t.id} style={{ fontSize: 10 }}>
                       {t.title}
                     </div>
@@ -259,14 +311,12 @@ export default function Home() {
             ))}
           </div>
         </div>
-
       </div>
 
       {/* 下段 */}
       <div className="card" style={{ height: "30%" }}>
         <div className="card-title">過去の記録</div>
       </div>
-
     </div>
   );
 }

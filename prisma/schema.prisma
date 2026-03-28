@@ -55,8 +55,8 @@ model tasks {
   assigneeId  Int
   createdById Int
 
-  assignee  users @relation("AssignedTasks", fields: [assigneeId], references: [id])
-  createdBy users @relation("CreatedTasks", fields: [createdById], references: [id])
+assignee  users @relation("AssignedTasks", fields: [assigneeId], references: [id], onDelete: Cascade)
+createdBy users @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: Cascade)
 
   startDate DateTime?
   endDate   DateTime?

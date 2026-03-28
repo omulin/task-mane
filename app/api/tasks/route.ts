@@ -36,29 +36,28 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = await req.json();
 
-  // 🔥ログインユーザー取得
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
     return Response.json({ error: "Not logged in" }, { status: 401 });
   }
 
-  // 🔥DBにユーザーいるか確認
-  let user = await prisma.users.findUnique({
-    where: { email: session.user.email },
-  });
+  const user = await prisma.users.findUnique({
+  where: { email: session.user.email },
+});
 
-  // 🔥いなければ作る（ここ重要）
-  if (!user) {
-    user = await prisma.users.create({
-      data: {
-        name: session.user.name || "no-name",
-        email: session.user.email,
-        password: "google",
-        role: "USER",
-      },
-    });
-  }
+let currentUser = user;
+
+if (!currentUser) {
+  currentUser = await prisma.users.create({
+    data: {
+      name: session.user.name || "no-name",
+      email: session.user.email,
+      password: "google",
+      role: "USER",
+    },
+  });
+}
 
   const task = await prisma.tasks.create({
     data: {
@@ -82,6 +81,33 @@ export async function POST(req: Request) {
 // 削除
 export async function DELETE(req: Request) {
   const body = await req.json();
+
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return Response.json({ error: "Not logged in" }, { status: 401 });
+  }
+
+  const user = await prisma.users.findUnique({
+    where: { email: session.user.email },
+  });
+
+  if (!user) {
+    return Response.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const task = await prisma.tasks.findUnique({
+    where: { id: body.id },
+  });
+
+  if (!task) {
+    return Response.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  // STAFFは全部消せる、それ以外は自分のタスクだけ
+  if (user.role !== "STAFF" && task.createdById !== user.id) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   await prisma.tasks.delete({
     where: { id: body.id },
