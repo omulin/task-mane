@@ -17,7 +17,6 @@ export async function GET() {
 
   let tasks;
 
-  // 🔥 ここが追加ポイント（権限分け）
   if (user.role === "STAFF") {
     tasks = await prisma.tasks.findMany({
       orderBy: { id: "desc" },
@@ -32,7 +31,7 @@ export async function GET() {
   return Response.json(tasks);
 }
 
-// 作成（🔥ここ修正）
+/* ===== POST（作成） ===== */
 export async function POST(req: Request) {
   const body = await req.json();
 
@@ -42,35 +41,30 @@ export async function POST(req: Request) {
     return Response.json({ error: "Not logged in" }, { status: 401 });
   }
 
-  const user = await prisma.users.findUnique({
-  where: { email: session.user.email },
-});
-
-let currentUser = user;
-
-if (!currentUser) {
-  currentUser = await prisma.users.create({
-    data: {
-      name: session.user.name || "no-name",
-      email: session.user.email,
-      password: "google",
-      role: "USER",
-    },
+  let currentUser = await prisma.users.findUnique({
+    where: { email: session.user.email },
   });
-}
+
+  if (!currentUser) {
+    currentUser = await prisma.users.create({
+      data: {
+        name: session.user.name || "no-name",
+        email: session.user.email,
+        password: "google",
+        role: "USER",
+      },
+    });
+  }
 
   const task = await prisma.tasks.create({
     data: {
       title: body.title,
       status: "TODO",
       approval: "PENDING",
-
-      assigneeId: user.id,
-      createdById: user.id,
-
+      assigneeId: currentUser.id,
+      createdById: currentUser.id,
       startDate: body.startDate ? new Date(body.startDate) : null,
       endDate: body.endDate ? new Date(body.endDate) : null,
-
       week: 3,
     },
   });
@@ -78,7 +72,7 @@ if (!currentUser) {
   return Response.json(task);
 }
 
-// 削除
+/* ===== DELETE（削除） ===== */
 export async function DELETE(req: Request) {
   const body = await req.json();
 
@@ -104,7 +98,6 @@ export async function DELETE(req: Request) {
     return Response.json({ error: "Task not found" }, { status: 404 });
   }
 
-  // STAFFは全部消せる、それ以外は自分のタスクだけ
   if (user.role !== "STAFF" && task.createdById !== user.id) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -116,7 +109,7 @@ export async function DELETE(req: Request) {
   return Response.json({ ok: true });
 }
 
-// 更新
+/* ===== PUT（更新） ===== */
 export async function PUT(req: Request) {
   const body = await req.json();
 
