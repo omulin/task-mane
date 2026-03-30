@@ -41,6 +41,8 @@ export default function Home() {
   const [staffView, setStaffView] = useState<"tasks" | "users">("tasks");
   const [scheduleView, setScheduleView] = useState<ScheduleView>("gantt");
   const [historyTargetUserId, setHistoryTargetUserId] = useState<string>("all");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
 
   const [currentUser, setCurrentUser] = useState<CurrentUser>({
     id: null,
@@ -109,6 +111,8 @@ export default function Home() {
       setStaffView("tasks");
       setScheduleView("gantt");
       setHistoryTargetUserId("all");
+      setWeekOffset(0);
+      setMonthOffset(0);
       return;
     }
 
@@ -219,38 +223,121 @@ export default function Home() {
     return `${y}-${m}-${d}`;
   };
 
+  const toDateKey = (value: string | Date) => {
+    const d = new Date(value);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const isTaskOnDate = (task: any, date: Date) => {
+    if (!task.startDate) return false;
+
+    const targetKey = toDateKey(date);
+    const startKey = toDateKey(task.startDate);
+    const endKey = task.endDate ? toDateKey(task.endDate) : startKey;
+
+    return startKey <= targetKey && targetKey <= endKey;
+  };
+
   const formatMonthDay = (date: Date) => {
     return `${date.getMonth() + 1}/${date.getDate()}`;
   };
 
+  const formatMonthLabel = (date: Date) => {
+    return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+  };
+
+  const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+
+  const navButtonStyle = {
+    minWidth: 68,
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
+    background: "#4a90e2",
+    color: "#fff",
+    fontWeight: 700,
+  };
+
+  const smallMutedText = {
+    fontSize: 12,
+    color: "#666",
+  };
+
   const today = new Date();
-  const startOfWeek = new Date(today);
+  today.setHours(0, 0, 0, 0);
+
+  const actualTodayStr = formatDateKey(today);
+
+  /* ===== ガント用（2週間を1週ずつ2段） ===== */
+  const baseWeekDate = new Date(today);
+  baseWeekDate.setDate(today.getDate() + weekOffset * 7);
+
+  const startOfWeek = new Date(baseWeekDate);
+  startOfWeek.setDate(baseWeekDate.getDate() - baseWeekDate.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
-  startOfWeek.setDate(today.getDate() - today.getDay());
 
-  const todayStr = formatDateKey(today);
-
-  const weekDates = Array.from({ length: 7 }, (_, i) => {
+  const firstWeekDates = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(startOfWeek);
     date.setDate(startOfWeek.getDate() + i);
     return date;
   });
 
-  const ganttStartDate = new Date(startOfWeek);
-  const ganttDates = Array.from({ length: 14 }, (_, i) => {
-    const date = new Date(ganttStartDate);
-    date.setDate(ganttStartDate.getDate() + i);
+  const secondWeekStart = new Date(startOfWeek);
+  secondWeekStart.setDate(startOfWeek.getDate() + 7);
+  secondWeekStart.setHours(0, 0, 0, 0);
+
+  const secondWeekDates = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(secondWeekStart);
+    date.setDate(secondWeekStart.getDate() + i);
     return date;
   });
 
-  const ganttEndDate = new Date(ganttStartDate);
-  ganttEndDate.setDate(ganttStartDate.getDate() + 13);
-  ganttEndDate.setHours(23, 59, 59, 999);
+  const ganttRangeStart = firstWeekDates[0];
+  const ganttRangeEnd = secondWeekDates[6];
+  const ganttRangeLabel = `${formatMonthDay(ganttRangeStart)} 〜 ${formatMonthDay(
+    ganttRangeEnd
+  )}`;
 
-  const todayTasks = tasks.filter((t) => {
-    if (!t.startDate) return false;
-    return formatDateKey(new Date(t.startDate)) === todayStr;
+  /* ===== カレンダー用（月表示） ===== */
+  const baseMonthDate = new Date(today);
+  baseMonthDate.setMonth(today.getMonth() + monthOffset);
+  baseMonthDate.setDate(1);
+  baseMonthDate.setHours(0, 0, 0, 0);
+
+  const monthLabel = formatMonthLabel(baseMonthDate);
+
+  const monthStart = new Date(baseMonthDate);
+  const monthEnd = new Date(baseMonthDate.getFullYear(), baseMonthDate.getMonth() + 1, 0);
+
+  const calendarGridStart = new Date(monthStart);
+  calendarGridStart.setDate(monthStart.getDate() - monthStart.getDay());
+  calendarGridStart.setHours(0, 0, 0, 0);
+
+  const calendarGridEnd = new Date(monthEnd);
+  calendarGridEnd.setDate(monthEnd.getDate() + (6 - monthEnd.getDay()));
+  calendarGridEnd.setHours(0, 0, 0, 0);
+
+  const totalCalendarDays =
+    Math.round(
+      (calendarGridEnd.getTime() - calendarGridStart.getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1;
+
+  const calendarDates = Array.from({ length: totalCalendarDays }, (_, i) => {
+    const date = new Date(calendarGridStart);
+    date.setDate(calendarGridStart.getDate() + i);
+    return date;
   });
+
+  const calendarRows = [];
+  for (let i = 0; i < calendarDates.length; i += 7) {
+    calendarRows.push(calendarDates.slice(i, i + 7));
+  }
+
+  const todayTasks = tasks.filter((t) => isTaskOnDate(t, today));
 
   const progress = Math.round(
     (tasks.filter((t) => t.status === "DONE").length / (tasks.length || 1)) * 100
@@ -277,6 +364,92 @@ export default function Home() {
     if (!userId) return [];
     return completedTasks.filter((task) => task.createdById === userId);
   }, [completedTasks, currentUser.role, historyTargetUserId, userId]);
+
+  const renderGanttWeek = (weekDates: Date[], rowLabel: string) => {
+    const weekStart = new Date(weekDates[0]);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekDates[6]);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ ...smallMutedText, fontWeight: "bold", marginBottom: 6 }}>
+          {rowLabel}
+        </div>
+
+        <div style={{ display: "flex", marginBottom: 8 }}>
+          <div style={{ width: 88 }} />
+          {weekDates.map((date) => (
+            <div key={formatDateKey(date)} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 11 }}>{weekdayLabels[date.getDay()]}</div>
+              <div style={{ fontSize: 10, color: "#666" }}>{formatMonthDay(date)}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gap: 6 }}>
+          {tasks.map((task) => {
+            if (!task.startDate || !task.endDate) return null;
+
+            const taskStart = new Date(task.startDate);
+            const taskEnd = new Date(task.endDate);
+
+            taskStart.setHours(0, 0, 0, 0);
+            taskEnd.setHours(0, 0, 0, 0);
+
+            if (taskEnd < weekStart || taskStart > weekEnd) {
+              return null;
+            }
+
+            const visibleStart = taskStart < weekStart ? weekStart : taskStart;
+            const visibleEnd = taskEnd > weekEnd ? weekEnd : taskEnd;
+
+            const startOffset = Math.floor(
+              (visibleStart.getTime() - weekStart.getTime()) / 86400000
+            );
+            const endOffset = Math.floor(
+              (visibleEnd.getTime() - weekStart.getTime()) / 86400000
+            );
+            const span = endOffset - startOffset + 1;
+
+            return (
+              <div
+                key={`${rowLabel}-${task.id}`}
+                style={{ display: "flex", alignItems: "center", height: 34 }}
+              >
+                <div
+                  style={{
+                    width: 88,
+                    fontSize: 12,
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {task.title}
+                </div>
+                <div style={{ flex: 1, position: "relative", height: 18 }}>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: `${(startOffset / 7) * 100}%`,
+                      width: `${(span / 7) * 100}%`,
+                      height: 8,
+                      borderRadius: 999,
+                      background: "#4a90e2",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -658,7 +831,7 @@ export default function Home() {
           </div>
 
           {/* ガント / カレンダー切替 */}
-          <div className="card" style={{ flex: 3 }}>
+          <div className="card" style={{ flex: 3, overflowY: "auto" }}>
             <div className="tabs">
               <div
                 className={`tab ${scheduleView === "gantt" ? "active" : ""}`}
@@ -678,128 +851,158 @@ export default function Home() {
 
             {scheduleView === "gantt" ? (
               <>
-                <div className="card-title" style={{ marginTop: 8 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "80px 1fr 80px 80px 80px",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <button style={navButtonStyle} onClick={() => setWeekOffset((prev) => prev - 1)}>
+                    前週
+                  </button>
+
+                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13 }}>
+                    {ganttRangeLabel}
+                  </div>
+
+                  <button style={navButtonStyle} onClick={() => setWeekOffset(0)}>
+                    今週
+                  </button>
+
+                  <button style={navButtonStyle} onClick={() => setWeekOffset((prev) => prev + 1)}>
+                    次週
+                  </button>
+
+                  <div />
+                </div>
+
+                <div className="card-title" style={{ marginTop: 4 }}>
                   ガント（2週間）
                 </div>
 
-                <div style={{ display: "flex" }}>
-                  <div style={{ width: 88 }} />
-                  {ganttDates.map((date) => (
-                    <div key={formatDateKey(date)} style={{ flex: 1, textAlign: "center" }}>
-                      <div style={{ fontSize: 11 }}>{["日", "月", "火", "水", "木", "金", "土"][date.getDay()]}</div>
-                      <div style={{ fontSize: 10, color: "#666" }}>{formatMonthDay(date)}</div>
+                {renderGanttWeek(firstWeekDates, "1週目")}
+                {renderGanttWeek(secondWeekDates, "2週目")}
+              </>
+            ) : (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "80px 1fr 80px 80px 80px",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <button style={navButtonStyle} onClick={() => setMonthOffset((prev) => prev - 1)}>
+                    前月
+                  </button>
+
+                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13 }}>
+                    {monthLabel}
+                  </div>
+
+                  <button style={navButtonStyle} onClick={() => setMonthOffset(0)}>
+                    今月
+                  </button>
+
+                  <button style={navButtonStyle} onClick={() => setMonthOffset((prev) => prev + 1)}>
+                    次月
+                  </button>
+
+                  <div />
+                </div>
+
+                <div className="card-title" style={{ marginTop: 4 }}>
+                  カレンダー（月表示）
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(7, 1fr)",
+                    gap: 4,
+                    marginTop: 8,
+                    marginBottom: 6,
+                  }}
+                >
+                  {weekdayLabels.map((day) => (
+                    <div key={day} style={{ textAlign: "center", fontWeight: "bold", fontSize: 12 }}>
+                      {day}
                     </div>
                   ))}
                 </div>
 
-                <div style={{ marginTop: 8 }}>
-                  {tasks.map((t) => {
-                    if (!t.startDate || !t.endDate) return null;
-
-                    const taskStart = new Date(t.startDate);
-                    const taskEnd = new Date(t.endDate);
-
-                    taskStart.setHours(0, 0, 0, 0);
-                    taskEnd.setHours(0, 0, 0, 0);
-
-                    if (taskEnd < ganttStartDate || taskStart > ganttEndDate) {
-                      return null;
-                    }
-
-                    const visibleStart =
-                      taskStart < ganttStartDate ? ganttStartDate : taskStart;
-                    const visibleEnd =
-                      taskEnd > ganttEndDate ? ganttEndDate : taskEnd;
-
-                    const startOffset = Math.floor(
-                      (visibleStart.getTime() - ganttStartDate.getTime()) / 86400000
-                    );
-                    const endOffset = Math.floor(
-                      (visibleEnd.getTime() - ganttStartDate.getTime()) / 86400000
-                    );
-                    const span = endOffset - startOffset + 1;
-
-                    return (
-                      <div
-                        key={t.id}
-                        style={{ display: "flex", alignItems: "center", height: 34 }}
-                      >
-                        <div
-                          style={{
-                            width: 88,
-                            fontSize: 12,
-                            overflow: "hidden",
-                            whiteSpace: "nowrap",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          {t.title}
-                        </div>
-                        <div style={{ flex: 1, position: "relative", height: 18 }}>
-                          <div
-                            style={{
-                              position: "absolute",
-                              left: `${(startOffset / 14) * 100}%`,
-                              width: `${(span / 14) * 100}%`,
-                              height: 8,
-                              borderRadius: 999,
-                              background: "#4a90e2",
-                              top: "50%",
-                              transform: "translateY(-50%)",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="card-title" style={{ marginTop: 8 }}>
-                  カレンダー（1週間）
-                </div>
-
-                <div style={{ display: "flex", gap: 4 }}>
-                  {weekDates.map((date) => (
+                <div style={{ display: "grid", gap: 4 }}>
+                  {calendarRows.map((row, rowIndex) => (
                     <div
-                      key={formatDateKey(date)}
+                      key={rowIndex}
                       style={{
-                        flex: 1,
-                        minHeight: 180,
-                        border: "1px solid #eee",
-                        borderRadius: 8,
-                        padding: 6,
+                        display: "grid",
+                        gridTemplateColumns: "repeat(7, 1fr)",
+                        gap: 4,
                       }}
                     >
-                      <div style={{ fontSize: 11, fontWeight: "bold" }}>
-                        {["日", "月", "火", "水", "木", "金", "土"][date.getDay()]}
-                      </div>
-                      <div style={{ fontSize: 10, color: "#666", marginBottom: 6 }}>
-                        {formatMonthDay(date)}
-                      </div>
+                      {row.map((date) => {
+                        const isCurrentMonth = date.getMonth() === monthStart.getMonth();
+                        const isToday = formatDateKey(date) === actualTodayStr;
+                        const dayTasks = tasks.filter((t) => isTaskOnDate(t, date));
 
-                      <div style={{ display: "grid", gap: 4 }}>
-                        {tasks
-                          .filter(
-                            (t) =>
-                              t.startDate &&
-                              formatDateKey(new Date(t.startDate)) === formatDateKey(date)
-                          )
-                          .map((t) => (
+                        return (
+                          <div
+                            key={formatDateKey(date)}
+                            style={{
+                              minHeight: 88,
+                              border: "1px solid #eee",
+                              borderRadius: 8,
+                              padding: 6,
+                              background: isCurrentMonth ? "#fff" : "#f7f7f7",
+                              opacity: isCurrentMonth ? 1 : 0.7,
+                            }}
+                          >
                             <div
-                              key={t.id}
                               style={{
-                                fontSize: 10,
-                                padding: "4px 6px",
-                                borderRadius: 6,
-                                background: "#f3f4f6",
+                                fontSize: 11,
+                                fontWeight: "bold",
+                                color: isToday ? "#2563eb" : "#333",
+                                marginBottom: 4,
                               }}
                             >
-                              {t.title}
+                              {date.getDate()}
                             </div>
-                          ))}
-                      </div>
+
+                            <div style={{ display: "grid", gap: 4 }}>
+                              {dayTasks.slice(0, 3).map((task) => (
+                                <div
+                                  key={`${task.id}-${formatDateKey(date)}`}
+                                  style={{
+                                    fontSize: 10,
+                                    padding: "3px 5px",
+                                    borderRadius: 6,
+                                    background: "#f3f4f6",
+                                    overflow: "hidden",
+                                    whiteSpace: "nowrap",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  {task.title}
+                                </div>
+                              ))}
+
+                              {dayTasks.length > 3 && (
+                                <div style={{ fontSize: 10, color: "#666" }}>
+                                  +{dayTasks.length - 3}件
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
