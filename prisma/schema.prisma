@@ -31,32 +31,42 @@ enum ApprovalStatus {
 
 /* ===== MODELS ===== */
 model users {
-  id        Int      @id @default(autoincrement())
+  id        Int    @id @default(autoincrement())
   name      String
-  email     String   @unique
+  email     String @unique
   password  String
   role      Role
 
-  /* relations */
+  teamId    Int?
+  subTeamId Int?
+
   assignedTasks tasks[] @relation("AssignedTasks")
   createdTasks  tasks[] @relation("CreatedTasks")
+
+  team       teams?    @relation("TeamUsers", fields: [teamId], references: [id], onDelete: SetNull)
+  subTeam    subTeams? @relation("SubTeamUsers", fields: [subTeamId], references: [id], onDelete: SetNull)
+
+  createdTeams    teams[]    @relation("CreatedTeams")
+  createdSubTeams subTeams[] @relation("CreatedSubTeams")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model tasks {
-  id        Int      @id @default(autoincrement())
+  id        Int    @id @default(autoincrement())
   title     String
+  label     String?
+  color     String @default("#4a90e2")
 
-  status    TaskStatus      @default(TODO)
-  approval  ApprovalStatus  @default(PENDING)
+  status    TaskStatus     @default(TODO)
+  approval  ApprovalStatus @default(PENDING)
 
   assigneeId  Int
   createdById Int
 
-assignee  users @relation("AssignedTasks", fields: [assigneeId], references: [id], onDelete: Cascade)
-createdBy users @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: Cascade)
+  assignee  users @relation("AssignedTasks", fields: [assigneeId], references: [id], onDelete: Cascade)
+  createdBy users @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: Cascade)
 
   startDate DateTime?
   endDate   DateTime?
@@ -64,4 +74,36 @@ createdBy users @relation("CreatedTasks", fields: [createdById], references: [id
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model teams {
+  id          Int    @id @default(autoincrement())
+  name        String @unique
+
+  createdById Int?
+  createdBy   users? @relation("CreatedTeams", fields: [createdById], references: [id], onDelete: SetNull)
+
+  users       users[]    @relation("TeamUsers")
+  subTeams    subTeams[] @relation("TeamSubTeams")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model subTeams {
+  id          Int    @id @default(autoincrement())
+  name        String
+
+  teamId      Int
+  team        teams  @relation("TeamSubTeams", fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdById Int?
+  createdBy   users? @relation("CreatedSubTeams", fields: [createdById], references: [id], onDelete: SetNull)
+
+  users       users[] @relation("SubTeamUsers")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, name])
 }

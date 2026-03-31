@@ -10,36 +10,107 @@ type CurrentUser = {
   role: string | null;
 };
 
+type TeamSummary = {
+  id: number;
+  name: string;
+  createdById?: number | null;
+  _count?: {
+    users: number;
+    subTeams: number;
+  };
+};
+
+type SubTeamSummary = {
+  id: number;
+  name: string;
+  teamId: number;
+  createdById?: number | null;
+  team?: {
+    id: number;
+    name: string;
+  };
+  _count?: {
+    users: number;
+  };
+};
+
 type UserSummary = {
   id: number;
   name: string;
   email: string;
   role: string;
+  teamId?: number | null;
+  subTeamId?: number | null;
+  team?: {
+    id: number;
+    name: string;
+  } | null;
+  subTeam?: {
+    id: number;
+    name: string;
+    teamId: number;
+  } | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type TaskItem = {
+  id: number;
+  title: string;
+  label?: string | null;
+  color?: string | null;
+  status: "TODO" | "DOING" | "DONE";
+  approval?: string;
+  assigneeId: number;
+  createdById: number;
+  startDate?: string | null;
+  endDate?: string | null;
+  week?: number | null;
   createdAt?: string;
   updatedAt?: string;
 };
 
 type ScheduleView = "gantt" | "calendar";
+type TaskPanelView = "create" | "manage";
+
+const MANAGEMENT_ROLES = ["STAFF", "MANAGER", "DIRECTOR", "AREA", "ADMIN"];
+
+function isManagementRole(role: string | null | undefined) {
+  return !!role && MANAGEMENT_ROLES.includes(role);
+}
 
 export default function Home() {
   const { data: session } = useSession();
 
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [usersList, setUsersList] = useState<UserSummary[]>([]);
+  const [teamsList, setTeamsList] = useState<TeamSummary[]>([]);
+  const [subTeamsList, setSubTeamsList] = useState<SubTeamSummary[]>([]);
 
   const [newTitle, setNewTitle] = useState("");
   const [newStart, setNewStart] = useState("");
   const [newEnd, setNewEnd] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [newTaskLabel, setNewTaskLabel] = useState("");
+  const [newTaskColor, setNewTaskColor] = useState("#4a90e2");
 
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserRole, setNewUserRole] = useState("USER");
 
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newSubTeamName, setNewSubTeamName] = useState("");
+  const [selectedTeamIdForSubTeam, setSelectedTeamIdForSubTeam] = useState("");
+
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [userTeamFilter, setUserTeamFilter] = useState("all");
+  const [userSubTeamFilter, setUserSubTeamFilter] = useState("all");
+
   const [userId, setUserId] = useState<number | null>(null);
   const [staffView, setStaffView] = useState<"tasks" | "users">("tasks");
   const [scheduleView, setScheduleView] = useState<ScheduleView>("gantt");
+  const [taskPanelView, setTaskPanelView] = useState<TaskPanelView>("create");
   const [historyTargetUserId, setHistoryTargetUserId] = useState<string>("all");
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
@@ -75,19 +146,45 @@ export default function Home() {
       });
   };
 
+  const fetchTeams = () => {
+    fetch("/api/teams")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setTeamsList(data);
+        } else {
+          setTeamsList([]);
+        }
+      });
+  };
+
+  const fetchSubTeams = () => {
+    fetch("/api/subTeams")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setSubTeamsList(data);
+        } else {
+          setSubTeamsList([]);
+        }
+      });
+  };
+
   const fetchMe = () => {
     fetch("/api/me")
       .then((res) => res.json())
       .then((data) => {
+        const nextRole = data?.role ?? null;
+
         setUserId(data?.id ?? null);
         setCurrentUser({
           id: data?.id ?? null,
           name: data?.name ?? null,
           email: data?.email ?? null,
-          role: data?.role ?? null,
+          role: nextRole,
         });
 
-        if (data?.role !== "STAFF") {
+        if (!isManagementRole(nextRole)) {
           setStaffView("tasks");
           setHistoryTargetUserId("all");
         }
@@ -102,6 +199,8 @@ export default function Home() {
     if (!session) {
       setUserId(null);
       setUsersList([]);
+      setTeamsList([]);
+      setSubTeamsList([]);
       setCurrentUser({
         id: null,
         name: null,
@@ -110,6 +209,7 @@ export default function Home() {
       });
       setStaffView("tasks");
       setScheduleView("gantt");
+      setTaskPanelView("create");
       setHistoryTargetUserId("all");
       setWeekOffset(0);
       setMonthOffset(0);
@@ -121,16 +221,20 @@ export default function Home() {
   }, [session]);
 
   useEffect(() => {
-    if (!session || currentUser.role !== "STAFF") {
+    if (!session || !isManagementRole(currentUser.role)) {
       setUsersList([]);
+      setTeamsList([]);
+      setSubTeamsList([]);
       return;
     }
 
     fetchUsers();
+    fetchTeams();
+    fetchSubTeams();
   }, [session, currentUser.role]);
 
   const createTask = async () => {
-    if (!newTitle) return;
+    if (!newTitle.trim()) return;
 
     await fetch("/api/tasks", {
       method: "POST",
@@ -141,13 +245,16 @@ export default function Home() {
         title: newTitle,
         startDate: newStart,
         endDate: newEnd,
+        label: newTaskLabel,
+        color: newTaskColor,
       }),
     });
 
     setNewTitle("");
     setNewStart("");
     setNewEnd("");
-    setDueDate("");
+    setNewTaskLabel("");
+    setNewTaskColor("#4a90e2");
     fetchTasks();
   };
 
@@ -174,6 +281,42 @@ export default function Home() {
     fetchUsers();
   };
 
+  const createTeam = async () => {
+    if (!newTeamName.trim()) return;
+
+    await fetch("/api/teams", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: newTeamName,
+      }),
+    });
+
+    setNewTeamName("");
+    fetchTeams();
+  };
+
+  const createSubTeam = async () => {
+    if (!newSubTeamName.trim() || !selectedTeamIdForSubTeam) return;
+
+    await fetch("/api/subTeams", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: newSubTeamName,
+        teamId: Number(selectedTeamIdForSubTeam),
+      }),
+    });
+
+    setNewSubTeamName("");
+    fetchTeams();
+    fetchSubTeams();
+  };
+
   const updateUserRole = async (id: number, role: string) => {
     await fetch("/api/users", {
       method: "PATCH",
@@ -194,9 +337,176 @@ export default function Home() {
     }
   };
 
+  const updateUserAssignment = async (
+    id: number,
+    teamId: number | null,
+    subTeamId: number | null
+  ) => {
+    await fetch("/api/users", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id,
+        teamId,
+        subTeamId,
+      }),
+    });
+
+    fetchUsers();
+    fetchTeams();
+    fetchSubTeams();
+  };
+
+  const updateTaskStatus = async (
+    id: number,
+    status: "TODO" | "DOING" | "DONE"
+  ) => {
+    await fetch("/api/tasks", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id, status }),
+    });
+    fetchTasks();
+  };
+
+  const saveTask = async (task: TaskItem) => {
+    await fetch("/api/tasks", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: task.id,
+        title: task.title,
+        startDate: task.startDate || null,
+        endDate: task.endDate || null,
+        label: task.label ?? "",
+        color: task.color ?? "#4a90e2",
+        assigneeId: task.assigneeId,
+      }),
+    });
+    fetchTasks();
+  };
+
+  const saveTeamName = async (team: TeamSummary) => {
+    await fetch("/api/teams", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: team.id,
+        name: team.name,
+      }),
+    });
+    fetchTeams();
+    fetchSubTeams();
+    fetchUsers();
+  };
+
+  const saveSubTeamName = async (subTeam: SubTeamSummary) => {
+    await fetch("/api/subTeams", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: subTeam.id,
+        name: subTeam.name,
+      }),
+    });
+    fetchSubTeams();
+    fetchUsers();
+  };
+
   const handleRoleSelectChange = (id: number, role: string) => {
     setUsersList((prev) =>
       prev.map((user) => (user.id === id ? { ...user, role } : user))
+    );
+  };
+
+  const handleUserTeamChange = (id: number, value: string) => {
+    const teamId = value === "" ? null : Number(value);
+    const selectedTeam =
+      teamId === null ? null : teamsList.find((team) => team.id === teamId) || null;
+
+    setUsersList((prev) =>
+      prev.map((user) =>
+        user.id === id
+          ? {
+              ...user,
+              teamId,
+              team: selectedTeam ? { id: selectedTeam.id, name: selectedTeam.name } : null,
+              subTeamId: null,
+              subTeam: null,
+            }
+          : user
+      )
+    );
+  };
+
+  const handleUserSubTeamChange = (id: number, value: string) => {
+    const subTeamId = value === "" ? null : Number(value);
+    const selectedSubTeam =
+      subTeamId === null
+        ? null
+        : subTeamsList.find((subTeam) => subTeam.id === subTeamId) || null;
+    const selectedTeam =
+      selectedSubTeam === null
+        ? null
+        : teamsList.find((team) => team.id === selectedSubTeam.teamId) || null;
+
+    setUsersList((prev) =>
+      prev.map((user) =>
+        user.id === id
+          ? {
+              ...user,
+              teamId:
+                selectedSubTeam !== null
+                  ? selectedSubTeam.teamId
+                  : user.teamId ?? null,
+              team:
+                selectedSubTeam && selectedTeam
+                  ? { id: selectedTeam.id, name: selectedTeam.name }
+                  : user.team ?? null,
+              subTeamId,
+              subTeam: selectedSubTeam
+                ? {
+                    id: selectedSubTeam.id,
+                    name: selectedSubTeam.name,
+                    teamId: selectedSubTeam.teamId,
+                  }
+                : null,
+            }
+          : user
+      )
+    );
+  };
+
+  const handleTaskLocalChange = (
+    id: number,
+    patch: Partial<
+      Pick<TaskItem, "title" | "startDate" | "endDate" | "label" | "color" | "assigneeId">
+    >
+  ) => {
+    setTasks((prev) =>
+      prev.map((task) => (task.id === id ? { ...task, ...patch } : task))
+    );
+  };
+
+  const handleTeamLocalChange = (id: number, name: string) => {
+    setTeamsList((prev) =>
+      prev.map((team) => (team.id === id ? { ...team, name } : team))
+    );
+  };
+
+  const handleSubTeamLocalChange = (id: number, name: string) => {
+    setSubTeamsList((prev) =>
+      prev.map((subTeam) => (subTeam.id === id ? { ...subTeam, name } : subTeam))
     );
   };
 
@@ -204,14 +514,6 @@ export default function Home() {
     await fetch("/api/tasks", {
       method: "DELETE",
       body: JSON.stringify({ id }),
-    });
-    fetchTasks();
-  };
-
-  const updateStatus = async (id: number, status: string) => {
-    await fetch("/api/tasks", {
-      method: "PUT",
-      body: JSON.stringify({ id, status }),
     });
     fetchTasks();
   };
@@ -231,7 +533,7 @@ export default function Home() {
     return `${y}-${m}-${day}`;
   };
 
-  const isTaskOnDate = (task: any, date: Date) => {
+  const isTaskOnDate = (task: TaskItem, date: Date) => {
     if (!task.startDate) return false;
 
     const targetKey = toDateKey(date);
@@ -260,19 +562,43 @@ export default function Home() {
     background: "#4a90e2",
     color: "#fff",
     fontWeight: 700,
-  };
+  } as const;
 
   const smallMutedText = {
     fontSize: 12,
     color: "#666",
-  };
+  } as const;
+
+  const actionButtonStyle = {
+    padding: "6px 10px",
+    borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
+    background: "#4a90e2",
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 700,
+  } as const;
+
+  const subtleButtonStyle = {
+    padding: "6px 10px",
+    borderRadius: 8,
+    border: "1px solid #d1d5db",
+    cursor: "pointer",
+    background: "#fff",
+    color: "#111827",
+    fontSize: 12,
+  } as const;
+
+  const compactInputStyle = {
+    maxWidth: 140,
+  } as const;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const actualTodayStr = formatDateKey(today);
 
-  /* ===== ガント用（2週間を1週ずつ2段） ===== */
   const baseWeekDate = new Date(today);
   baseWeekDate.setDate(today.getDate() + weekOffset * 7);
 
@@ -302,7 +628,6 @@ export default function Home() {
     ganttRangeEnd
   )}`;
 
-  /* ===== カレンダー用（月表示） ===== */
   const baseMonthDate = new Date(today);
   baseMonthDate.setMonth(today.getMonth() + monthOffset);
   baseMonthDate.setDate(1);
@@ -332,7 +657,7 @@ export default function Home() {
     return date;
   });
 
-  const calendarRows = [];
+  const calendarRows: Date[][] = [];
   for (let i = 0; i < calendarDates.length; i += 7) {
     calendarRows.push(calendarDates.slice(i, i + 7));
   }
@@ -346,15 +671,19 @@ export default function Home() {
   const totalUsers = usersList.length;
   const totalStaff = usersList.filter((u) => u.role === "STAFF").length;
   const totalNormalUsers = usersList.filter((u) => u.role === "USER").length;
+  const totalTeams = teamsList.length;
+  const totalSubTeams = subTeamsList.length;
+  const unassignedUsers = usersList.filter((u) => !u.teamId).length;
 
-  const isStaffUsersView = currentUser.role === "STAFF" && staffView === "users";
+  const isManagementUser = isManagementRole(currentUser.role);
+  const isStaffUsersView = isManagementUser && staffView === "users";
 
   const completedTasks = useMemo(() => {
     return tasks.filter((task) => task.status === "DONE");
   }, [tasks]);
 
   const historyTasks = useMemo(() => {
-    if (currentUser.role === "STAFF") {
+    if (isManagementUser) {
       if (historyTargetUserId === "all") return completedTasks;
       return completedTasks.filter(
         (task) => String(task.createdById) === historyTargetUserId
@@ -363,7 +692,53 @@ export default function Home() {
 
     if (!userId) return [];
     return completedTasks.filter((task) => task.createdById === userId);
-  }, [completedTasks, currentUser.role, historyTargetUserId, userId]);
+  }, [completedTasks, isManagementUser, historyTargetUserId, userId]);
+
+  const filteredUsers = useMemo(() => {
+    const keyword = userSearch.trim().toLowerCase();
+
+    return usersList.filter((user) => {
+      const keywordMatch =
+        keyword === "" ||
+        user.name.toLowerCase().includes(keyword) ||
+        user.email.toLowerCase().includes(keyword) ||
+        (user.team?.name ?? "").toLowerCase().includes(keyword) ||
+        (user.subTeam?.name ?? "").toLowerCase().includes(keyword);
+
+      const roleMatch = userRoleFilter === "all" || user.role === userRoleFilter;
+
+      const teamMatch =
+        userTeamFilter === "all" ||
+        (userTeamFilter === "__unassigned__" && !user.teamId) ||
+        String(user.teamId ?? "") === userTeamFilter;
+
+      const subTeamMatch =
+        userSubTeamFilter === "all" ||
+        (userSubTeamFilter === "__unassigned__" && !user.subTeamId) ||
+        String(user.subTeamId ?? "") === userSubTeamFilter;
+
+      return keywordMatch && roleMatch && teamMatch && subTeamMatch;
+    });
+  }, [usersList, userSearch, userRoleFilter, userTeamFilter, userSubTeamFilter]);
+
+  const renderTaskLabelChip = (task: TaskItem) => {
+    if (!task.label) return null;
+
+    return (
+      <span
+        style={{
+          fontSize: 10,
+          padding: "2px 6px",
+          borderRadius: 999,
+          background: "#eef2ff",
+          color: "#334155",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {task.label}
+      </span>
+    );
+  };
 
   const renderGanttWeek = (weekDates: Date[], rowLabel: string) => {
     const weekStart = new Date(weekDates[0]);
@@ -437,7 +812,7 @@ export default function Home() {
                       width: `${(span / 7) * 100}%`,
                       height: 8,
                       borderRadius: 999,
-                      background: "#4a90e2",
+                      background: task.color || "#4a90e2",
                       top: "50%",
                       transform: "translateY(-50%)",
                     }}
@@ -462,22 +837,16 @@ export default function Home() {
         gap: 12,
       }}
     >
-      {/* 上段 */}
       <div style={{ display: "flex", gap: 12, height: "35%" }}>
-        {/* ログイン */}
         <div className="card" style={{ flex: 1 }}>
           <div className="card-title">支援管理システム</div>
 
           <div className="tabs">
-            <div className={`tab ${currentUser.role !== "STAFF" ? "active" : ""}`}>
-              利用者
-            </div>
-            <div className={`tab ${currentUser.role === "STAFF" ? "active" : ""}`}>
-              スタッフ
-            </div>
+            <div className={`tab ${!isManagementUser ? "active" : ""}`}>利用者</div>
+            <div className={`tab ${isManagementUser ? "active" : ""}`}>管理者</div>
           </div>
 
-          {currentUser.role === "STAFF" && (
+          {isManagementUser && (
             <div className="tabs" style={{ marginBottom: 8 }}>
               <div
                 className={`tab ${staffView === "tasks" ? "active" : ""}`}
@@ -517,7 +886,7 @@ export default function Home() {
                   display: "inline-block",
                   padding: "4px 8px",
                   borderRadius: 8,
-                  background: currentUser.role === "STAFF" ? "#dbeafe" : "#f3f4f6",
+                  background: isManagementUser ? "#dbeafe" : "#f3f4f6",
                 }}
               >
                 権限：{currentUser.role ?? "USER"}
@@ -530,20 +899,28 @@ export default function Home() {
           )}
         </div>
 
-        {/* STAFF: 利用者管理ビュー */}
         {isStaffUsersView ? (
           <>
             <div
               className="card"
-              style={{ flex: 2, display: "flex", flexDirection: "column", overflow: "hidden" }}
+              style={{
+                flex: 2,
+                display: "flex",
+                flexDirection: "column",
+                overflowY: "auto",
+              }}
             >
               <div className="tabs">
-                <div className="tab active">利用者追加</div>
-                <div className="tab">権限管理</div>
+                <div className="tab active">利用者・チーム追加</div>
+                <div className="tab">所属管理</div>
               </div>
 
               <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
-                STAFF専用：利用者を追加できます
+                管理者専用：利用者追加、チーム作成、サブチーム作成ができます
+              </div>
+
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 6 }}>
+                利用者追加
               </div>
 
               <input
@@ -584,17 +961,64 @@ export default function Home() {
                 利用者追加
               </button>
 
+              <hr style={{ margin: "14px 0", borderColor: "#eee" }} />
+
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 6 }}>
+                チーム追加
+              </div>
+
+              <input
+                className="input"
+                placeholder="チーム名"
+                value={newTeamName}
+                onChange={(e) => setNewTeamName(e.target.value)}
+              />
+
+              <button className="button" onClick={createTeam}>
+                チーム追加
+              </button>
+
+              <hr style={{ margin: "14px 0", borderColor: "#eee" }} />
+
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 6 }}>
+                サブチーム追加
+              </div>
+
+              <select
+                className="input"
+                value={selectedTeamIdForSubTeam}
+                onChange={(e) => setSelectedTeamIdForSubTeam(e.target.value)}
+              >
+                <option value="">親チームを選択</option>
+                {teamsList.map((team) => (
+                  <option key={team.id} value={String(team.id)}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                className="input"
+                placeholder="サブチーム名"
+                value={newSubTeamName}
+                onChange={(e) => setNewSubTeamName(e.target.value)}
+              />
+
+              <button className="button" onClick={createSubTeam}>
+                サブチーム追加
+              </button>
+
               <div style={{ fontSize: 12, color: "#888", marginTop: 8 }}>
-                Googleログインの初回自動登録に加えて、必要なら手動追加もできます
+                ユーザーは未所属で追加して、あとから配属できます
               </div>
             </div>
 
             <div className="card" style={{ flex: 1 }}>
-              <div className="card-title">利用者ダッシュボード</div>
+              <div className="card-title">チームダッシュボード</div>
 
               <div style={{ fontSize: 20, fontWeight: "bold" }}>{totalUsers}人</div>
 
-              <div style={{ height: 8, background: "#eee", borderRadius: 4 }}>
+              <div style={{ height: 8, background: "#eee", borderRadius: 4, marginBottom: 12 }}>
                 <div
                   style={{
                     width: totalUsers > 0 ? `${(totalStaff / totalUsers) * 100}%` : "0%",
@@ -610,26 +1034,44 @@ export default function Home() {
               STAFF {totalStaff}
               <br />
               USER {totalNormalUsers}
+              <br />
+              未所属 {unassignedUsers}
+              <br />
+              チーム {totalTeams}
+              <br />
+              サブチーム {totalSubTeams}
             </div>
           </>
         ) : (
           <>
-            {/* 中央：リスト */}
             <div
               className="card"
               style={{ flex: 2, display: "flex", flexDirection: "column", overflow: "hidden" }}
             >
-              <div className="tabs">
-                <div className="tab active">リスト</div>
-                <div className="tab">ボード</div>
-                <div className="tab">ガント</div>
+              <div className="card-title">タスク管理</div>
+
+              <div className="tabs" style={{ marginBottom: 8 }}>
+                <div
+                  className={`tab ${taskPanelView === "create" ? "active" : ""}`}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setTaskPanelView("create")}
+                >
+                  追加
+                </div>
+                <div
+                  className={`tab ${taskPanelView === "manage" ? "active" : ""}`}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setTaskPanelView("manage")}
+                >
+                  管理
+                </div>
               </div>
 
               <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
-                {currentUser.role === "STAFF" ? "全体タスク表示" : "自分のタスク表示"}
+                {isManagementUser ? "全体タスク表示" : "自分のタスク表示"}
               </div>
 
-              {currentUser.role === "STAFF" && (
+              {isManagementUser && (
                 <div
                   style={{
                     fontSize: 12,
@@ -646,68 +1088,233 @@ export default function Home() {
                 </div>
               )}
 
-              <input
-                className="input"
-                placeholder="タスク名"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-              />
+              {taskPanelView === "create" ? (
+                <div
+                  style={{
+                    flex: 1,
+                    paddingRight: 4,
+                    display: "grid",
+                    gap: 6,
+                    alignContent: "start",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: "bold" }}>新規タスク</div>
 
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  type="date"
-                  value={newStart}
-                  onChange={(e) => setNewStart(e.target.value)}
-                />
-                <span>〜</span>
-                <input
-                  type="date"
-                  value={newEnd}
-                  onChange={(e) => setNewEnd(e.target.value)}
-                />
-              </div>
+                  <input
+                    className="input"
+                    placeholder="タスク名"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                  />
 
-              <button className="button" onClick={createTask}>
-                追加
-              </button>
-
-              <div style={{ overflowY: "auto", flex: 1 }}>
-                {tasks.map((task) => (
-                  <div key={task.id} className="task">
-                    {task.title}
-
-                    {currentUser.role === "STAFF" && (
-                      <div style={{ fontSize: 11, color: "#888" }}>
-                        作成者ID: {task.createdById}
-                      </div>
-                    )}
-
-                    <div style={{ fontSize: 11, color: "#666" }}>
-                      {task.startDate &&
-                        task.endDate &&
-                        `${new Date(task.startDate).getMonth() + 1}/${new Date(
-                          task.startDate
-                        ).getDate()}〜${new Date(task.endDate).getMonth() + 1}/${new Date(
-                          task.endDate
-                        ).getDate()}`}
-                    </div>
-
-                    <select
-                      value={task.status}
-                      onChange={(e) => updateStatus(task.id, e.target.value)}
-                    >
-                      <option value="TODO">未入力</option>
-                      <option value="DOING">進行中</option>
-                      <option value="DONE">完了</option>
-                    </select>
-
-                    <button onClick={() => deleteTask(task.id)}>削除</button>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto 1fr",
+                      gap: 6,
+                      alignItems: "center",
+                    }}
+                  >
+                    <input
+                      type="date"
+                      value={newStart}
+                      onChange={(e) => setNewStart(e.target.value)}
+                    />
+                    <span style={{ fontSize: 12, color: "#666" }}>〜</span>
+                    <input
+                      type="date"
+                      value={newEnd}
+                      onChange={(e) => setNewEnd(e.target.value)}
+                    />
                   </div>
-                ))}
-              </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
+                      gap: 8,
+                      alignItems: "center",
+                    }}
+                  >
+                    <input
+                      className="input"
+                      placeholder="ラベル"
+                      value={newTaskLabel}
+                      onChange={(e) => setNewTaskLabel(e.target.value)}
+                    />
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 12, color: "#666" }}>色</span>
+                      <input
+                        type="color"
+                        value={newTaskColor}
+                        onChange={(e) => setNewTaskColor(e.target.value)}
+                        style={{
+                          width: 40,
+                          height: 34,
+                          border: "none",
+                          background: "transparent",
+                          padding: 0,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <button className="button" onClick={createTask}>
+                    追加
+                  </button>
+                </div>
+              ) : (
+                <div style={{ overflowY: "auto", flex: 1, paddingRight: 4 }}>
+                  {tasks.length === 0 && (
+                    <div style={{ fontSize: 12, color: "#888" }}>タスクなし</div>
+                  )}
+
+                  {tasks.map((task) => {
+                    const assigneeName =
+                      usersList.find((user) => user.id === task.assigneeId)?.name ??
+                      `ID: ${task.assigneeId}`;
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="task"
+                        style={{
+                          borderLeft: `6px solid ${task.color || "#4a90e2"}`,
+                          marginBottom: 8,
+                          padding: 10,
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              justifyContent: "space-between",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                              <div style={{ fontWeight: "bold" }}>{task.title}</div>
+                              {renderTaskLabelChip(task)}
+                            </div>
+
+                            <select
+                              value={task.status}
+                              onChange={(e) =>
+                                updateTaskStatus(
+                                  task.id,
+                                  e.target.value as "TODO" | "DOING" | "DONE"
+                                )
+                              }
+                            >
+                              <option value="TODO">未入力</option>
+                              <option value="DOING">進行中</option>
+                              <option value="DONE">完了</option>
+                            </select>
+                          </div>
+
+                          <input
+                            className="input"
+                            value={task.title}
+                            onChange={(e) =>
+                              handleTaskLocalChange(task.id, { title: e.target.value })
+                            }
+                            placeholder="タイトル"
+                          />
+
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            <input
+                              type="date"
+                              value={task.startDate ? toDateKey(task.startDate) : ""}
+                              onChange={(e) =>
+                                handleTaskLocalChange(task.id, {
+                                  startDate: e.target.value || null,
+                                })
+                              }
+                            />
+                            <span style={{ fontSize: 12, color: "#666" }}>〜</span>
+                            <input
+                              type="date"
+                              value={task.endDate ? toDateKey(task.endDate) : ""}
+                              onChange={(e) =>
+                                handleTaskLocalChange(task.id, {
+                                  endDate: e.target.value || null,
+                                })
+                              }
+                            />
+                          </div>
+
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <input
+                              className="input"
+                              placeholder="ラベル"
+                              value={task.label ?? ""}
+                              onChange={(e) =>
+                                handleTaskLocalChange(task.id, { label: e.target.value })
+                              }
+                              style={compactInputStyle}
+                            />
+
+                            <input
+                              type="color"
+                              value={task.color || "#4a90e2"}
+                              onChange={(e) =>
+                                handleTaskLocalChange(task.id, { color: e.target.value })
+                              }
+                              style={{
+                                width: 40,
+                                height: 34,
+                                border: "none",
+                                background: "transparent",
+                              }}
+                            />
+
+                            {isManagementUser ? (
+                              <select
+                                value={task.assigneeId}
+                                onChange={(e) =>
+                                  handleTaskLocalChange(task.id, {
+                                    assigneeId: Number(e.target.value),
+                                  })
+                                }
+                                style={{ maxWidth: 160 }}
+                              >
+                                {usersList.map((user) => (
+                                  <option key={user.id} value={user.id}>
+                                    {user.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div style={{ fontSize: 12, color: "#666" }}>
+                                担当: {assigneeName}
+                              </div>
+                            )}
+
+                            <button style={actionButtonStyle} onClick={() => saveTask(task)}>
+                              保存
+                            </button>
+
+                            <button style={subtleButtonStyle} onClick={() => deleteTask(task.id)}>
+                              削除
+                            </button>
+                          </div>
+
+                          {isManagementUser && (
+                            <div style={{ fontSize: 11, color: "#888" }}>
+                              作成者ID: {task.createdById} / 担当者: {assigneeName}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* ダッシュボード */}
             <div className="card" style={{ flex: 1 }}>
               <div className="card-title">ダッシュボード</div>
 
@@ -734,69 +1341,252 @@ export default function Home() {
         )}
       </div>
 
-      {/* 中段 */}
       {isStaffUsersView ? (
         <div style={{ display: "flex", gap: 12, height: "35%" }}>
           <div className="card" style={{ flex: 3, overflowY: "auto" }}>
             <div className="card-title">利用者一覧</div>
 
-            {usersList.length === 0 && (
-              <div style={{ fontSize: 12, color: "#888" }}>利用者データなし</div>
+            <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+              <input
+                className="input"
+                placeholder="名前 / メール / チーム検索"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+              />
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <select
+                  className="input"
+                  value={userRoleFilter}
+                  onChange={(e) => setUserRoleFilter(e.target.value)}
+                  style={{ maxWidth: 150 }}
+                >
+                  <option value="all">全role</option>
+                  <option value="USER">USER</option>
+                  <option value="STAFF">STAFF</option>
+                  <option value="MANAGER">MANAGER</option>
+                  <option value="DIRECTOR">DIRECTOR</option>
+                  <option value="AREA">AREA</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+
+                <select
+                  className="input"
+                  value={userTeamFilter}
+                  onChange={(e) => setUserTeamFilter(e.target.value)}
+                  style={{ maxWidth: 170 }}
+                >
+                  <option value="all">全チーム</option>
+                  <option value="__unassigned__">未所属のみ</option>
+                  {teamsList.map((team) => (
+                    <option key={team.id} value={String(team.id)}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  className="input"
+                  value={userSubTeamFilter}
+                  onChange={(e) => setUserSubTeamFilter(e.target.value)}
+                  style={{ maxWidth: 180 }}
+                >
+                  <option value="all">全サブチーム</option>
+                  <option value="__unassigned__">未所属のみ</option>
+                  {subTeamsList.map((subTeam) => (
+                    <option key={subTeam.id} value={String(subTeam.id)}>
+                      {subTeam.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {filteredUsers.length === 0 && (
+              <div style={{ fontSize: 12, color: "#888" }}>該当する利用者なし</div>
             )}
 
             <div style={{ display: "grid", gap: 8 }}>
-              {usersList.map((user) => (
-                <div
-                  key={user.id}
-                  className="task"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ fontWeight: "bold" }}>{user.name}</div>
-                  <div style={{ fontSize: 12, color: "#666" }}>{user.email}</div>
+              {filteredUsers.map((user) => {
+                const availableSubTeams = user.teamId
+                  ? subTeamsList.filter((subTeam) => subTeam.teamId === user.teamId)
+                  : [];
 
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select
-                      className="input"
-                      value={user.role}
-                      onChange={(e) => handleRoleSelectChange(user.id, e.target.value)}
-                      style={{ maxWidth: 180 }}
+                return (
+                  <div
+                    key={user.id}
+                    className="task"
+                    style={{
+                      padding: 10,
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
                     >
-                      <option value="USER">USER</option>
-                      <option value="STAFF">STAFF</option>
-                      <option value="MANAGER">MANAGER</option>
-                      <option value="DIRECTOR">DIRECTOR</option>
-                      <option value="AREA">AREA</option>
-                      <option value="ADMIN">ADMIN</option>
-                    </select>
+                      <div style={{ fontWeight: "bold" }}>{user.name}</div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: "#f3f4f6",
+                        }}
+                      >
+                        {user.role}
+                      </div>
+                    </div>
 
-                    <button
-                      className="button"
-                      onClick={() => updateUserRole(user.id, user.role)}
+                    <div style={{ fontSize: 12, color: "#666" }}>{user.email}</div>
+
+                    <div style={{ fontSize: 12, color: "#444" }}>
+                      {user.team?.name ?? "未所属"} / {user.subTeam?.name ?? "未所属"}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
                     >
-                      権限更新
-                    </button>
+                      <select
+                        className="input"
+                        value={user.role}
+                        onChange={(e) => handleRoleSelectChange(user.id, e.target.value)}
+                        style={{ maxWidth: 140 }}
+                      >
+                        <option value="USER">USER</option>
+                        <option value="STAFF">STAFF</option>
+                        <option value="MANAGER">MANAGER</option>
+                        <option value="DIRECTOR">DIRECTOR</option>
+                        <option value="AREA">AREA</option>
+                        <option value="ADMIN">ADMIN</option>
+                      </select>
+
+                      <button
+                        className="button"
+                        onClick={() => updateUserRole(user.id, user.role)}
+                      >
+                        権限更新
+                      </button>
+
+                      <select
+                        className="input"
+                        value={user.teamId ?? ""}
+                        onChange={(e) => handleUserTeamChange(user.id, e.target.value)}
+                        style={{ maxWidth: 150 }}
+                      >
+                        <option value="">チーム未所属</option>
+                        {teamsList.map((team) => (
+                          <option key={team.id} value={String(team.id)}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="input"
+                        value={user.subTeamId ?? ""}
+                        onChange={(e) => handleUserSubTeamChange(user.id, e.target.value)}
+                        style={{ maxWidth: 160 }}
+                        disabled={!user.teamId}
+                      >
+                        <option value="">サブチーム未所属</option>
+                        {availableSubTeams.map((subTeam) => (
+                          <option key={subTeam.id} value={String(subTeam.id)}>
+                            {subTeam.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        className="button"
+                        onClick={() =>
+                          updateUserAssignment(
+                            user.id,
+                            user.teamId ?? null,
+                            user.subTeamId ?? null
+                          )
+                        }
+                      >
+                        所属更新
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          <div className="card" style={{ flex: 2 }}>
-            <div className="card-title">管理メモ</div>
-            <div style={{ fontSize: 12, color: "#666", lineHeight: 1.8 }}>
-              ・初回Googleログイン時に自動でUSER登録<br />
-              ・STAFFはここから権限変更可能<br />
-              ・必要なら手動で利用者追加も可能
+          <div className="card" style={{ flex: 2, overflowY: "auto" }}>
+            <div className="card-title">チーム / サブチーム管理</div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 6 }}>
+                チーム一覧
+              </div>
+
+              <div style={{ display: "grid", gap: 6 }}>
+                {teamsList.map((team) => (
+                  <div key={team.id} className="task" style={{ padding: 10 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        className="input"
+                        value={team.name}
+                        onChange={(e) => handleTeamLocalChange(team.id, e.target.value)}
+                        style={{ maxWidth: 180 }}
+                      />
+                      <button style={actionButtonStyle} onClick={() => saveTeamName(team)}>
+                        名前更新
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+                      所属人数: {team._count?.users ?? 0} / サブチーム数: {team._count?.subTeams ?? 0}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 6 }}>
+                サブチーム一覧
+              </div>
+
+              <div style={{ display: "grid", gap: 6 }}>
+                {subTeamsList.map((subTeam) => (
+                  <div key={subTeam.id} className="task" style={{ padding: 10 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        className="input"
+                        value={subTeam.name}
+                        onChange={(e) => handleSubTeamLocalChange(subTeam.id, e.target.value)}
+                        style={{ maxWidth: 180 }}
+                      />
+                      <button style={actionButtonStyle} onClick={() => saveSubTeamName(subTeam)}>
+                        名前更新
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+                      親チーム: {subTeam.team?.name ?? "-"} / 所属人数: {subTeam._count?.users ?? 0}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       ) : (
         <div style={{ display: "flex", gap: 12, height: "35%" }}>
-          {/* 今日のタスク */}
           <div className="card" style={{ flex: 1, overflowY: "auto" }}>
             <div className="card-title">今日のタスク</div>
 
@@ -805,13 +1595,17 @@ export default function Home() {
             )}
 
             {todayTasks.map((t) => (
-              <div key={t.id} className="task">
-                {t.title}
+              <div
+                key={t.id}
+                className="task"
+                style={{ borderLeft: `6px solid ${t.color || "#4a90e2"}` }}
+              >
+                <div style={{ fontWeight: "bold" }}>{t.title}</div>
+                {renderTaskLabelChip(t)}
               </div>
             ))}
           </div>
 
-          {/* ボード */}
           <div className="card" style={{ flex: 2 }}>
             <div className="card-title">ボード</div>
             <div className="board">
@@ -821,8 +1615,19 @@ export default function Home() {
                   {tasks
                     .filter((t) => t.status === s)
                     .map((t) => (
-                      <div key={t.id} className="task-card">
-                        {t.title}
+                      <div
+                        key={t.id}
+                        className="task-card"
+                        style={{
+                          borderLeft: `6px solid ${t.color || "#4a90e2"}`,
+                        }}
+                      >
+                        <div>{t.title}</div>
+                        {t.label && (
+                          <div style={{ marginTop: 4, fontSize: 10, color: "#555" }}>
+                            {t.label}
+                          </div>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -830,7 +1635,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ガント / カレンダー切替 */}
           <div className="card" style={{ flex: 3, overflowY: "auto" }}>
             <div className="tabs">
               <div
@@ -984,6 +1788,7 @@ export default function Home() {
                                     fontSize: 10,
                                     padding: "3px 5px",
                                     borderRadius: 6,
+                                    borderLeft: `4px solid ${task.color || "#4a90e2"}`,
                                     background: "#f3f4f6",
                                     overflow: "hidden",
                                     whiteSpace: "nowrap",
@@ -1012,7 +1817,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 下段 */}
       {isStaffUsersView ? (
         <div className="card" style={{ height: "30%", overflowY: "auto" }}>
           <div className="card-title">登録済みユーザー詳細</div>
@@ -1037,6 +1841,12 @@ export default function Home() {
                 </div>
                 <div style={{ fontSize: 12, color: "#666" }}>{user.email}</div>
                 <div style={{ fontSize: 12, color: "#444" }}>権限: {user.role}</div>
+                <div style={{ fontSize: 12, color: "#444" }}>
+                  チーム: {user.team?.name ?? "未所属"}
+                </div>
+                <div style={{ fontSize: 12, color: "#444" }}>
+                  サブチーム: {user.subTeam?.name ?? "未所属"}
+                </div>
               </div>
             ))}
           </div>
@@ -1045,7 +1855,7 @@ export default function Home() {
         <div className="card" style={{ height: "30%", overflowY: "auto" }}>
           <div className="card-title">過去の記録</div>
 
-          {currentUser.role === "STAFF" && (
+          {isManagementUser && (
             <div style={{ marginBottom: 12 }}>
               <select
                 className="input"
@@ -1069,8 +1879,24 @@ export default function Home() {
 
           <div style={{ display: "grid", gap: 8 }}>
             {historyTasks.map((task) => (
-              <div key={task.id} className="task">
-                <div style={{ fontWeight: "bold" }}>{task.title}</div>
+              <div
+                key={task.id}
+                className="task"
+                style={{ borderLeft: `6px solid ${task.color || "#4a90e2"}` }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ fontWeight: "bold" }}>{task.title}</div>
+                  {renderTaskLabelChip(task)}
+                </div>
+
                 <div style={{ fontSize: 12, color: "#666" }}>
                   {task.startDate &&
                     task.endDate &&
@@ -1081,7 +1907,7 @@ export default function Home() {
                     ).getDate()}`}
                 </div>
 
-                {currentUser.role === "STAFF" && (
+                {isManagementUser && (
                   <div style={{ fontSize: 11, color: "#888" }}>
                     作成者ID: {task.createdById}
                   </div>
