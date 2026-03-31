@@ -2,15 +2,54 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
 
-const CAN_MANAGE_ALL_TASKS = ["STAFF", "MANAGER", "DIRECTOR", "AREA", "ADMIN"];
+const MANAGEMENT_ROLES = ["STAFF", "MANAGER", "DIRECTOR", "AREA", "ADMIN"];
 const ALLOWED_STATUS = ["TODO", "DOING", "DONE"] as const;
 
 function canManageAllTasks(role: string) {
-  return CAN_MANAGE_ALL_TASKS.includes(role);
+  return MANAGEMENT_ROLES.includes(role);
 }
 
-function isValidStatus(status: string): status is (typeof ALLOWED_STATUS)[number] {
+function canTouchTask(
+  currentUser: { id: number; role: string },
+  task: { createdById: number; assigneeId: number }
+) {
+  return (
+    canManageAllTasks(currentUser.role) ||
+    task.createdById === currentUser.id ||
+    task.assigneeId === currentUser.id
+  );
+}
+
+function isValidStatus(
+  status: string
+): status is (typeof ALLOWED_STATUS)[number] {
   return ALLOWED_STATUS.includes(status as (typeof ALLOWED_STATUS)[number]);
+}
+
+function normalizeTitle(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function normalizeLabel(value: unknown) {
+  const label = String(value ?? "").trim();
+  return label === "" ? null : label.slice(0, 50);
+}
+
+function isValidHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function parseDateInput(value: unknown): { ok: boolean; value: Date | null } {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true, value: null };
+  }
+
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return { ok: false, value: null };
+  }
+
+  return { ok: true, value: date };
 }
 
 export async function GET() {
@@ -20,25 +59,72 @@ export async function GET() {
     return Response.json([], { status: 401 });
   }
 
-  const user = await prisma.users.findUnique({
+  const currentUser = await prisma.users.findUnique({
     where: { email: session.user.email },
   });
 
-  if (!user) return Response.json([]);
+  if (!currentUser) {
+    return Response.json([]);
+  }
 
-  const tasks = canManageAllTasks(user.role)
+  const tasks = canManageAllTasks(currentUser.role)
     ? await prisma.tasks.findMany({
         orderBy: { id: "desc" },
+        include: {
+          assignee: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              teamId: true,
+              subTeamId: true,
+            },
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              teamId: true,
+              subTeamId: true,
+            },
+          },
+        },
       })
     : await prisma.tasks.findMany({
-        where: { createdById: user.id },
+        where: {
+          OR: [{ createdById: currentUser.id }, { assigneeId: currentUser.id }],
+        },
         orderBy: { id: "desc" },
+        include: {
+          assignee: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              teamId: true,
+              subTeamId: true,
+            },
+          },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              teamId: true,
+              subTeamId: true,
+            },
+          },
+        },
       });
 
   return Response.json(tasks);
 }
 
-/* ===== POST（作成） ===== */
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
 
@@ -63,31 +149,94 @@ export async function POST(req: Request) {
     });
   }
 
-  const title = String(body.title ?? "").trim();
-
+  const title = normalizeTitle(body.title);
   if (!title) {
     return Response.json({ error: "title is required" }, { status: 400 });
   }
 
+  const parsedStart = parseDateInput(body.startDate);
+  const parsedEnd = parseDateInput(body.endDate);
+
+  if (!parsedStart.ok || !parsedEnd.ok) {
+    return Response.json({ error: "invalid date" }, { status: 400 });
+  }
+
+  if (parsedStart.value && parsedEnd.value && parsedStart.value > parsedEnd.value) {
+    return Response.json(
+      { error: "startDate must be before or equal to endDate" },
+      { status: 400 }
+    );
+  }
+
+  let assigneeId = currentUser.id;
+
+  if (body.assigneeId !== undefined && body.assigneeId !== null && body.assigneeId !== "") {
+    const nextAssigneeId = Number(body.assigneeId);
+
+    if (Number.isNaN(nextAssigneeId)) {
+      return Response.json({ error: "invalid assigneeId" }, { status: 400 });
+    }
+
+    if (!canManageAllTasks(currentUser.role) && nextAssigneeId !== currentUser.id) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const assignee = await prisma.users.findUnique({
+      where: { id: nextAssigneeId },
+    });
+
+    if (!assignee) {
+      return Response.json({ error: "Assignee not found" }, { status: 404 });
+    }
+
+    assigneeId = nextAssigneeId;
+  }
+
+  const color =
+    typeof body.color === "string" && isValidHexColor(body.color)
+      ? body.color
+      : "#4a90e2";
+
   const task = await prisma.tasks.create({
     data: {
       title,
-      label: body.label ? String(body.label).trim() : null,
-      color: body.color ? String(body.color) : "#4a90e2",
+      label: normalizeLabel(body.label),
+      color,
       status: "TODO",
       approval: "PENDING",
-      assigneeId: currentUser.id,
+      assigneeId,
       createdById: currentUser.id,
-      startDate: body.startDate ? new Date(body.startDate) : null,
-      endDate: body.endDate ? new Date(body.endDate) : null,
+      startDate: parsedStart.value,
+      endDate: parsedEnd.value,
       week: 3,
+    },
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          teamId: true,
+          subTeamId: true,
+        },
+      },
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          teamId: true,
+          subTeamId: true,
+        },
+      },
     },
   });
 
   return Response.json(task);
 }
 
-/* ===== DELETE（削除） ===== */
 export async function DELETE(req: Request) {
   const body = await req.json().catch(() => ({}));
 
@@ -97,34 +246,43 @@ export async function DELETE(req: Request) {
     return Response.json({ error: "Not logged in" }, { status: 401 });
   }
 
-  const user = await prisma.users.findUnique({
+  const currentUser = await prisma.users.findUnique({
     where: { email: session.user.email },
   });
 
-  if (!user) {
+  if (!currentUser) {
     return Response.json({ error: "User not found" }, { status: 404 });
   }
 
+  const id = Number(body.id);
+  if (Number.isNaN(id)) {
+    return Response.json({ error: "id is required" }, { status: 400 });
+  }
+
   const task = await prisma.tasks.findUnique({
-    where: { id: body.id },
+    where: { id },
+    select: {
+      id: true,
+      createdById: true,
+      assigneeId: true,
+    },
   });
 
   if (!task) {
     return Response.json({ error: "Task not found" }, { status: 404 });
   }
 
-  if (!canManageAllTasks(user.role) && task.createdById !== user.id) {
+  if (!canTouchTask(currentUser, task)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   await prisma.tasks.delete({
-    where: { id: body.id },
+    where: { id },
   });
 
   return Response.json({ ok: true });
 }
 
-/* ===== PUT（更新） ===== */
 export async function PUT(req: Request) {
   const body = await req.json().catch(() => ({}));
 
@@ -142,19 +300,20 @@ export async function PUT(req: Request) {
     return Response.json({ error: "User not found" }, { status: 404 });
   }
 
-  if (typeof body.id !== "number") {
+  const id = Number(body.id);
+  if (Number.isNaN(id)) {
     return Response.json({ error: "id is required" }, { status: 400 });
   }
 
   const task = await prisma.tasks.findUnique({
-    where: { id: body.id },
+    where: { id },
   });
 
   if (!task) {
     return Response.json({ error: "Task not found" }, { status: 404 });
   }
 
-  if (!canManageAllTasks(currentUser.role) && task.createdById !== currentUser.id) {
+  if (!canTouchTask(currentUser, task)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -166,39 +325,77 @@ export async function PUT(req: Request) {
     label?: string | null;
     color?: string;
     assigneeId?: number;
+    completedAt?: Date | null;
+    doneById?: number | null;
   } = {};
 
   if (Object.prototype.hasOwnProperty.call(body, "title")) {
-    const title = String(body.title ?? "").trim();
+    const title = normalizeTitle(body.title);
     if (!title) {
       return Response.json({ error: "title cannot be empty" }, { status: 400 });
     }
     data.title = title;
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "label")) {
+    data.label = normalizeLabel(body.label);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "color")) {
+    const color = String(body.color ?? "").trim();
+    if (color && !isValidHexColor(color)) {
+      return Response.json({ error: "invalid color" }, { status: 400 });
+    }
+    data.color = color || "#4a90e2";
+  }
+
   if (Object.prototype.hasOwnProperty.call(body, "startDate")) {
-    data.startDate = body.startDate ? new Date(body.startDate) : null;
+    const parsed = parseDateInput(body.startDate);
+    if (!parsed.ok) {
+      return Response.json({ error: "invalid startDate" }, { status: 400 });
+    }
+    data.startDate = parsed.value;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "endDate")) {
-    data.endDate = body.endDate ? new Date(body.endDate) : null;
+    const parsed = parseDateInput(body.endDate);
+    if (!parsed.ok) {
+      return Response.json({ error: "invalid endDate" }, { status: 400 });
+    }
+    data.endDate = parsed.value;
+  }
+
+  const nextStartDate =
+    Object.prototype.hasOwnProperty.call(data, "startDate")
+      ? data.startDate ?? null
+      : task.startDate;
+
+  const nextEndDate =
+    Object.prototype.hasOwnProperty.call(data, "endDate")
+      ? data.endDate ?? null
+      : task.endDate;
+
+  if (nextStartDate && nextEndDate && nextStartDate > nextEndDate) {
+    return Response.json(
+      { error: "startDate must be before or equal to endDate" },
+      { status: 400 }
+    );
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "status")) {
     if (!isValidStatus(body.status)) {
       return Response.json({ error: "invalid status" }, { status: 400 });
     }
+
     data.status = body.status;
-  }
 
-  if (Object.prototype.hasOwnProperty.call(body, "label")) {
-    const label = String(body.label ?? "").trim();
-    data.label = label === "" ? null : label;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, "color")) {
-    const color = String(body.color ?? "").trim();
-    data.color = color === "" ? "#4a90e2" : color;
+    if (body.status === "DONE") {
+      data.completedAt = new Date();
+      data.doneById = currentUser.id;
+    } else {
+      data.completedAt = null;
+      data.doneById = null;
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "assigneeId")) {
@@ -224,8 +421,30 @@ export async function PUT(req: Request) {
   }
 
   const updatedTask = await prisma.tasks.update({
-    where: { id: body.id },
+    where: { id },
     data,
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          teamId: true,
+          subTeamId: true,
+        },
+      },
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          teamId: true,
+          subTeamId: true,
+        },
+      },
+    },
   });
 
   return Response.json(updatedTask);
