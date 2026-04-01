@@ -143,6 +143,7 @@ function compareTasksByMode(a: TaskItem, b: TaskItem, mode: TaskSortMode) {
       : a.startDate
         ? new Date(a.startDate).getTime()
         : Number.MAX_SAFE_INTEGER;
+
     const bTime = b.endDate
       ? new Date(b.endDate).getTime()
       : b.startDate
@@ -183,6 +184,7 @@ export default function Home() {
   const [newEnd, setNewEnd] = useState("");
   const [newTaskLabel, setNewTaskLabel] = useState("");
   const [newTaskColor, setNewTaskColor] = useState("#4a90e2");
+  const [showCreateLabelSuggestions, setShowCreateLabelSuggestions] = useState(false);
 
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -388,6 +390,7 @@ export default function Home() {
       setBoardLabelFilter("all");
       setShowBoardFilters(false);
 
+      setShowCreateLabelSuggestions(false);
       setTodayTaskScope("mine");
       return;
     }
@@ -436,6 +439,7 @@ export default function Home() {
       setNewEnd("");
       setNewTaskLabel("");
       setNewTaskColor("#4a90e2");
+      setShowCreateLabelSuggestions(false);
       fetchTasks();
     } catch (error) {
       showNotice(
@@ -2207,98 +2211,116 @@ export default function Home() {
                 </>
               )}
 
-              {taskPanelView === "create" ? (
-                <div
-                  style={{
-                    flex: 1,
-                    paddingRight: 4,
-                    display: "grid",
-                    gap: 6,
-                    alignContent: "start",
-                    overflowY: "auto",
-                  }}
-                >
-                  <div style={{ fontSize: 12, fontWeight: "bold" }}>新規タスク</div>
+             {taskPanelView === "create" ? (
+  <div
+    style={{
+      flex: 1,
+      minHeight: 0,
+      paddingRight: 4,
+      display: "flex",
+      flexDirection: "column",
+      gap: 6,
+      justifyContent: "space-between",
+    }}
+  >
+    <div style={{ display: "grid", gap: 6 }}>
+      <input
+        className="input"
+        placeholder="タスク名"
+        value={newTitle}
+        onChange={(e) => setNewTitle(e.target.value)}
+        style={{ marginBottom: 0 }}
+      />
 
-                  <input
-                    className="input"
-                    placeholder="タスク名"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                  />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
+          gap: 6,
+          alignItems: "center",
+        }}
+      >
+        <input
+          type="date"
+          value={newStart}
+          onChange={(e) => setNewStart(e.target.value)}
+        />
+        <span style={{ fontSize: 12, color: "#666" }}>〜</span>
+        <input
+          type="date"
+          value={newEnd}
+          onChange={(e) => setNewEnd(e.target.value)}
+        />
+      </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr auto 1fr",
-                      gap: 6,
-                      alignItems: "center",
-                    }}
-                  >
-                    <input
-                      type="date"
-                      value={newStart}
-                      onChange={(e) => setNewStart(e.target.value)}
-                    />
-                    <span style={{ fontSize: 12, color: "#666" }}>〜</span>
-                    <input
-                      type="date"
-                      value={newEnd}
-                      onChange={(e) => setNewEnd(e.target.value)}
-                    />
-                  </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) auto auto",
+          gap: 6,
+          alignItems: "center",
+        }}
+      >
+        <input
+          className="input"
+          placeholder="ラベル"
+          value={newTaskLabel}
+          onChange={(e) => setNewTaskLabel(e.target.value)}
+          style={{ marginBottom: 0 }}
+        />
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr auto",
-                      gap: 8,
-                      alignItems: "center",
-                    }}
-                  >
-                    <input
-                      className="input"
-                      placeholder="ラベル"
-                      value={newTaskLabel}
-                      onChange={(e) => setNewTaskLabel(e.target.value)}
-                    />
+        <button
+          style={compactSubtleButtonStyle}
+          onClick={() => setShowCreateLabelSuggestions((prev) => !prev)}
+        >
+          {showCreateLabelSuggestions ? "閉じる" : "候補"}
+        </button>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 12, color: "#666" }}>色</span>
-                      <input
-                        type="color"
-                        value={newTaskColor}
-                        onChange={(e) => setNewTaskColor(e.target.value)}
-                        style={{
-                          width: 40,
-                          height: 34,
-                          border: "none",
-                          background: "transparent",
-                          padding: 0,
-                        }}
-                      />
-                    </div>
-                  </div>
+        <input
+          type="color"
+          value={newTaskColor}
+          onChange={(e) => setNewTaskColor(e.target.value)}
+          style={{
+            width: 36,
+            height: 34,
+            border: "none",
+            background: "transparent",
+            padding: 0,
+          }}
+        />
+      </div>
 
-                  {filteredSuggestedLabelsForCreate.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {filteredSuggestedLabelsForCreate.map((label) => (
-                        <button
-                          key={`create-${label}`}
-                          style={suggestionChipStyle}
-                          onClick={() => applySuggestedLabel(label)}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+      {showCreateLabelSuggestions &&
+        filteredSuggestedLabelsForCreate.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              overflowX: "auto",
+              paddingBottom: 2,
+            }}
+          >
+            {filteredSuggestedLabelsForCreate.slice(0, 8).map((label) => (
+              <button
+                key={`create-${label}`}
+                style={{
+                  ...suggestionChipStyle,
+                  flexShrink: 0,
+                }}
+                onClick={() => applySuggestedLabel(label)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+    </div>
 
-                  <button className="button" onClick={createTask}>
-                    追加
-                  </button>
-                </div>
-              ) : (
+    <button className="button" onClick={createTask}>
+      追加
+    </button>
+  </div>
+) : (
                 <div style={{ overflowY: "auto", flex: 1, paddingRight: 4 }}>
                   {manageVisibleTasks.length === 0 && (
                     <div style={{ fontSize: 12, color: "#888" }}>該当するタスクなし</div>
@@ -2332,7 +2354,9 @@ export default function Home() {
                               className="input"
                               value={task.title}
                               onChange={(e) =>
-                                handleTaskLocalChange(task.id, { title: e.target.value })
+                                handleTaskLocalChange(task.id, {
+                                  title: e.target.value,
+                                })
                               }
                               placeholder="タイトル"
                               style={{ marginBottom: 0 }}

@@ -52,6 +52,39 @@ function parseDateInput(value: unknown): { ok: boolean; value: Date | null } {
   return { ok: true, value: date };
 }
 
+const taskInclude = {
+  assignee: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      teamId: true,
+      subTeamId: true,
+    },
+  },
+  createdBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      teamId: true,
+      subTeamId: true,
+    },
+  },
+  doneBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      teamId: true,
+      subTeamId: true,
+    },
+  },
+} as const;
+
 export async function GET() {
   const session = await getServerSession(authOptions);
 
@@ -70,56 +103,14 @@ export async function GET() {
   const tasks = canManageAllTasks(currentUser.role)
     ? await prisma.tasks.findMany({
         orderBy: { id: "desc" },
-        include: {
-          assignee: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamId: true,
-              subTeamId: true,
-            },
-          },
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamId: true,
-              subTeamId: true,
-            },
-          },
-        },
+        include: taskInclude,
       })
     : await prisma.tasks.findMany({
         where: {
           OR: [{ createdById: currentUser.id }, { assigneeId: currentUser.id }],
         },
         orderBy: { id: "desc" },
-        include: {
-          assignee: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamId: true,
-              subTeamId: true,
-            },
-          },
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              teamId: true,
-              subTeamId: true,
-            },
-          },
-        },
+        include: taskInclude,
       });
 
   return Response.json(tasks);
@@ -206,32 +197,13 @@ export async function POST(req: Request) {
       approval: "PENDING",
       assigneeId,
       createdById: currentUser.id,
+      doneById: null,
+      completedAt: null,
       startDate: parsedStart.value,
       endDate: parsedEnd.value,
       week: 3,
     },
-    include: {
-      assignee: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          teamId: true,
-          subTeamId: true,
-        },
-      },
-      createdBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          teamId: true,
-          subTeamId: true,
-        },
-      },
-    },
+    include: taskInclude,
   });
 
   return Response.json(task);
@@ -390,11 +362,15 @@ export async function PUT(req: Request) {
     data.status = body.status;
 
     if (body.status === "DONE") {
-      data.completedAt = new Date();
-      data.doneById = currentUser.id;
+      if (task.status !== "DONE") {
+        data.completedAt = new Date();
+        data.doneById = currentUser.id;
+      }
     } else {
-      data.completedAt = null;
-      data.doneById = null;
+      if (task.status === "DONE") {
+        data.completedAt = null;
+        data.doneById = null;
+      }
     }
   }
 
@@ -423,28 +399,7 @@ export async function PUT(req: Request) {
   const updatedTask = await prisma.tasks.update({
     where: { id },
     data,
-    include: {
-      assignee: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          teamId: true,
-          subTeamId: true,
-        },
-      },
-      createdBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          teamId: true,
-          subTeamId: true,
-        },
-      },
-    },
+    include: taskInclude,
   });
 
   return Response.json(updatedTask);

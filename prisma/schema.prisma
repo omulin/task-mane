@@ -42,7 +42,7 @@ model users {
 
   assignedTasks tasks[] @relation("AssignedTasks")
   createdTasks  tasks[] @relation("CreatedTasks")
-  completedTasks tasks[] @relation("CompletedTasks")
+  doneTasks     tasks[] @relation("DoneTasks")
 
   team       teams?    @relation("TeamUsers", fields: [teamId], references: [id], onDelete: SetNull)
   subTeam    subTeams? @relation("SubTeamUsers", fields: [subTeamId], references: [id], onDelete: SetNull)
@@ -69,7 +69,7 @@ model tasks {
 
   assignee  users  @relation("AssignedTasks", fields: [assigneeId], references: [id], onDelete: Cascade)
   createdBy users  @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: Cascade)
-  doneBy    users? @relation("CompletedTasks", fields: [doneById], references: [id], onDelete: SetNull)
+  doneBy    users? @relation("DoneTasks", fields: [doneById], references: [id], onDelete: SetNull)
 
   startDate   DateTime?
   endDate     DateTime?
