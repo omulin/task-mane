@@ -2035,9 +2035,128 @@ export default function Home() {
                 </div>
               )}
 
-              {taskPanelView === "manage" && (
-                <>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              {taskPanelView === "create" ? (
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    paddingRight: 4,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <input
+                      className="input"
+                      placeholder="タスク名"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      style={{ marginBottom: 0 }}
+                    />
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto 1fr",
+                        gap: 6,
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="date"
+                        value={newStart}
+                        onChange={(e) => setNewStart(e.target.value)}
+                      />
+                      <span style={{ fontSize: 12, color: "#666" }}>〜</span>
+                      <input
+                        type="date"
+                        value={newEnd}
+                        onChange={(e) => setNewEnd(e.target.value)}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                        gap: 6,
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        className="input"
+                        placeholder="ラベル"
+                        value={newTaskLabel}
+                        onChange={(e) => setNewTaskLabel(e.target.value)}
+                        style={{ marginBottom: 0 }}
+                      />
+
+                      <button
+                        style={compactSubtleButtonStyle}
+                        onClick={() => setShowCreateLabelSuggestions((prev) => !prev)}
+                      >
+                        {showCreateLabelSuggestions ? "閉じる" : "候補"}
+                      </button>
+
+                      <input
+                        type="color"
+                        value={newTaskColor}
+                        onChange={(e) => setNewTaskColor(e.target.value)}
+                        style={{
+                          width: 36,
+                          height: 34,
+                          border: "none",
+                          background: "transparent",
+                          padding: 0,
+                        }}
+                      />
+                    </div>
+
+                    {showCreateLabelSuggestions &&
+                      filteredSuggestedLabelsForCreate.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 6,
+                            overflowX: "auto",
+                            paddingBottom: 2,
+                          }}
+                        >
+                          {filteredSuggestedLabelsForCreate.slice(0, 8).map((label) => (
+                            <button
+                              key={`create-${label}`}
+                              style={{
+                                ...suggestionChipStyle,
+                                flexShrink: 0,
+                              }}
+                              onClick={() => applySuggestedLabel(label)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+
+                  <button className="button" onClick={createTask}>
+                    追加
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: "auto",
+                    paddingRight: 4,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button
                       style={{
                         ...subtleButtonStyle,
@@ -2068,7 +2187,6 @@ export default function Home() {
                         display: "grid",
                         gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                         gap: 8,
-                        marginBottom: 10,
                       }}
                     >
                       <input
@@ -2208,294 +2326,183 @@ export default function Home() {
                       )}
                     </div>
                   )}
-                </>
-              )}
 
-             {taskPanelView === "create" ? (
-  <div
-    style={{
-      flex: 1,
-      minHeight: 0,
-      paddingRight: 4,
-      display: "flex",
-      flexDirection: "column",
-      gap: 6,
-      justifyContent: "space-between",
-    }}
-  >
-    <div style={{ display: "grid", gap: 6 }}>
-      <input
-        className="input"
-        placeholder="タスク名"
-        value={newTitle}
-        onChange={(e) => setNewTitle(e.target.value)}
-        style={{ marginBottom: 0 }}
-      />
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {manageVisibleTasks.length === 0 && (
+                      <div style={{ fontSize: 12, color: "#888" }}>該当するタスクなし</div>
+                    )}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr auto 1fr",
-          gap: 6,
-          alignItems: "center",
-        }}
-      >
-        <input
-          type="date"
-          value={newStart}
-          onChange={(e) => setNewStart(e.target.value)}
-        />
-        <span style={{ fontSize: 12, color: "#666" }}>〜</span>
-        <input
-          type="date"
-          value={newEnd}
-          onChange={(e) => setNewEnd(e.target.value)}
-        />
-      </div>
+                    {manageVisibleTasks.map((task) => {
+                      const assigneeName = getDisplayUserName(task.assignee, task.assigneeId);
+                      const creatorName = getDisplayUserName(task.createdBy, task.createdById);
+                      const doneByName = getDisplayUserName(task.doneBy, task.doneById ?? null);
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) auto auto",
-          gap: 6,
-          alignItems: "center",
-        }}
-      >
-        <input
-          className="input"
-          placeholder="ラベル"
-          value={newTaskLabel}
-          onChange={(e) => setNewTaskLabel(e.target.value)}
-          style={{ marginBottom: 0 }}
-        />
-
-        <button
-          style={compactSubtleButtonStyle}
-          onClick={() => setShowCreateLabelSuggestions((prev) => !prev)}
-        >
-          {showCreateLabelSuggestions ? "閉じる" : "候補"}
-        </button>
-
-        <input
-          type="color"
-          value={newTaskColor}
-          onChange={(e) => setNewTaskColor(e.target.value)}
-          style={{
-            width: 36,
-            height: 34,
-            border: "none",
-            background: "transparent",
-            padding: 0,
-          }}
-        />
-      </div>
-
-      {showCreateLabelSuggestions &&
-        filteredSuggestedLabelsForCreate.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              overflowX: "auto",
-              paddingBottom: 2,
-            }}
-          >
-            {filteredSuggestedLabelsForCreate.slice(0, 8).map((label) => (
-              <button
-                key={`create-${label}`}
-                style={{
-                  ...suggestionChipStyle,
-                  flexShrink: 0,
-                }}
-                onClick={() => applySuggestedLabel(label)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-    </div>
-
-    <button className="button" onClick={createTask}>
-      追加
-    </button>
-  </div>
-) : (
-                <div style={{ overflowY: "auto", flex: 1, paddingRight: 4 }}>
-                  {manageVisibleTasks.length === 0 && (
-                    <div style={{ fontSize: 12, color: "#888" }}>該当するタスクなし</div>
-                  )}
-
-                  {manageVisibleTasks.map((task) => {
-                    const assigneeName = getDisplayUserName(task.assignee, task.assigneeId);
-                    const creatorName = getDisplayUserName(task.createdBy, task.createdById);
-                    const doneByName = getDisplayUserName(task.doneBy, task.doneById ?? null);
-
-                    return (
-                      <div
-                        key={task.id}
-                        className="task"
-                        style={{
-                          borderLeft: `6px solid ${task.color || "#4a90e2"}`,
-                          marginBottom: 8,
-                          padding: 8,
-                        }}
-                      >
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "minmax(0, 1fr) 110px",
-                              gap: 8,
-                              alignItems: "center",
-                            }}
-                          >
-                            <input
-                              className="input"
-                              value={task.title}
-                              onChange={(e) =>
-                                handleTaskLocalChange(task.id, {
-                                  title: e.target.value,
-                                })
-                              }
-                              placeholder="タイトル"
-                              style={{ marginBottom: 0 }}
-                            />
-
-                            <select
-                              value={task.status}
-                              onChange={(e) =>
-                                updateTaskStatus(
-                                  task.id,
-                                  e.target.value as "TODO" | "DOING" | "DONE"
-                                )
-                              }
+                      return (
+                        <div
+                          key={task.id}
+                          className="task"
+                          style={{
+                            borderLeft: `6px solid ${task.color || "#4a90e2"}`,
+                            marginBottom: 8,
+                            padding: 8,
+                          }}
+                        >
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "minmax(0, 1fr) 110px",
+                                gap: 8,
+                                alignItems: "center",
+                              }}
                             >
-                              <option value="TODO">未入力</option>
-                              <option value="DOING">進行中</option>
-                              <option value="DONE">完了</option>
-                            </select>
-                          </div>
-
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 6,
-                              flexWrap: "wrap",
-                              alignItems: "center",
-                            }}
-                          >
-                            <input
-                              type="date"
-                              value={task.startDate ? toDateKey(task.startDate) : ""}
-                              onChange={(e) =>
-                                handleTaskLocalChange(task.id, {
-                                  startDate: e.target.value || null,
-                                })
-                              }
-                            />
-
-                            <span style={{ fontSize: 12, color: "#666" }}>〜</span>
-
-                            <input
-                              type="date"
-                              value={task.endDate ? toDateKey(task.endDate) : ""}
-                              onChange={(e) =>
-                                handleTaskLocalChange(task.id, {
-                                  endDate: e.target.value || null,
-                                })
-                              }
-                            />
-
-                            <input
-                              className="input"
-                              placeholder="ラベル"
-                              value={task.label ?? ""}
-                              onChange={(e) =>
-                                handleTaskLocalChange(task.id, { label: e.target.value })
-                              }
-                              style={{
-                                width: 120,
-                                marginBottom: 0,
-                              }}
-                            />
-
-                            <input
-                              type="color"
-                              value={task.color || "#4a90e2"}
-                              onChange={(e) =>
-                                handleTaskLocalChange(task.id, { color: e.target.value })
-                              }
-                              style={{
-                                width: 34,
-                                height: 34,
-                                border: "none",
-                                background: "transparent",
-                                padding: 0,
-                              }}
-                            />
-
-                            {isManagementUser ? (
-                              <select
-                                value={task.assigneeId}
+                              <input
+                                className="input"
+                                value={task.title}
                                 onChange={(e) =>
                                   handleTaskLocalChange(task.id, {
-                                    assigneeId: Number(e.target.value),
+                                    title: e.target.value,
                                   })
                                 }
-                                style={{ maxWidth: 140 }}
+                                placeholder="タイトル"
+                                style={{ marginBottom: 0 }}
+                              />
+
+                              <select
+                                value={task.status}
+                                onChange={(e) =>
+                                  updateTaskStatus(
+                                    task.id,
+                                    e.target.value as "TODO" | "DOING" | "DONE"
+                                  )
+                                }
                               >
-                                {usersList.map((user) => (
-                                  <option key={user.id} value={user.id}>
-                                    {user.name}
-                                  </option>
-                                ))}
+                                <option value="TODO">未入力</option>
+                                <option value="DOING">進行中</option>
+                                <option value="DONE">完了</option>
                               </select>
-                            ) : (
-                              <span style={{ fontSize: 11, color: "#666" }}>
-                                担当: {assigneeName}
-                              </span>
-                            )}
+                            </div>
 
-                            <button
-                              style={compactActionButtonStyle}
-                              onClick={() => saveTask(task)}
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 6,
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                              }}
                             >
-                              保存
-                            </button>
+                              <input
+                                type="date"
+                                value={task.startDate ? toDateKey(task.startDate) : ""}
+                                onChange={(e) =>
+                                  handleTaskLocalChange(task.id, {
+                                    startDate: e.target.value || null,
+                                  })
+                                }
+                              />
 
-                            <button
-                              style={compactSubtleButtonStyle}
-                              onClick={() => deleteTask(task.id)}
+                              <span style={{ fontSize: 12, color: "#666" }}>〜</span>
+
+                              <input
+                                type="date"
+                                value={task.endDate ? toDateKey(task.endDate) : ""}
+                                onChange={(e) =>
+                                  handleTaskLocalChange(task.id, {
+                                    endDate: e.target.value || null,
+                                  })
+                                }
+                              />
+
+                              <input
+                                className="input"
+                                placeholder="ラベル"
+                                value={task.label ?? ""}
+                                onChange={(e) =>
+                                  handleTaskLocalChange(task.id, { label: e.target.value })
+                                }
+                                style={{
+                                  width: 120,
+                                  marginBottom: 0,
+                                }}
+                              />
+
+                              <input
+                                type="color"
+                                value={task.color || "#4a90e2"}
+                                onChange={(e) =>
+                                  handleTaskLocalChange(task.id, { color: e.target.value })
+                                }
+                                style={{
+                                  width: 34,
+                                  height: 34,
+                                  border: "none",
+                                  background: "transparent",
+                                  padding: 0,
+                                }}
+                              />
+
+                              {isManagementUser ? (
+                                <select
+                                  value={task.assigneeId}
+                                  onChange={(e) =>
+                                    handleTaskLocalChange(task.id, {
+                                      assigneeId: Number(e.target.value),
+                                    })
+                                  }
+                                  style={{ maxWidth: 140 }}
+                                >
+                                  {usersList.map((user) => (
+                                    <option key={user.id} value={user.id}>
+                                      {user.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span style={{ fontSize: 11, color: "#666" }}>
+                                  担当: {assigneeName}
+                                </span>
+                              )}
+
+                              <button
+                                style={compactActionButtonStyle}
+                                onClick={() => saveTask(task)}
+                              >
+                                保存
+                              </button>
+
+                              <button
+                                style={compactSubtleButtonStyle}
+                                onClick={() => deleteTask(task.id)}
+                              >
+                                削除
+                              </button>
+                            </div>
+
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                                fontSize: 11,
+                                color: "#888",
+                              }}
                             >
-                              削除
-                            </button>
-                          </div>
-
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 8,
-                              flexWrap: "wrap",
-                              alignItems: "center",
-                              fontSize: 11,
-                              color: "#888",
-                            }}
-                          >
-                            {renderTaskLabelChip(task)}
-                            <span>作成: {creatorName}</span>
-                            <span>担当: {assigneeName}</span>
-                            {task.completedAt && (
-                              <>
-                                <span>完了: {formatDateTime(task.completedAt)}</span>
-                                <span>完了者: {doneByName}</span>
-                              </>
-                            )}
+                              {renderTaskLabelChip(task)}
+                              <span>作成: {creatorName}</span>
+                              <span>担当: {assigneeName}</span>
+                              {task.completedAt && (
+                                <>
+                                  <span>完了: {formatDateTime(task.completedAt)}</span>
+                                  <span>完了者: {doneByName}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
