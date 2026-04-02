@@ -35,12 +35,26 @@ function canAssignRole(currentRole: string, targetRole: string) {
   return ROLE_CHANGE_SCOPE[currentRole]?.includes(targetRole) ?? false;
 }
 
-/* ===== GET（一覧） ===== */
-export async function GET() {
+function canEditTarget(currentRole: string, targetCurrentRole: string) {
+  return ROLE_CHANGE_SCOPE[currentRole]?.includes(targetCurrentRole) ?? false;
+}
+
+function normalizeName(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function normalizeEmail(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+async function getCurrentUser() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
-    return Response.json({ error: "Not logged in" }, { status: 401 });
+    return {
+      user: null,
+      error: Response.json({ error: "Not logged in" }, { status: 401 }),
+    };
   }
 
   const currentUser = await prisma.users.findUnique({
@@ -48,12 +62,26 @@ export async function GET() {
   });
 
   if (!currentUser) {
-    return Response.json({ error: "User not found" }, { status: 404 });
+    return {
+      user: null,
+      error: Response.json({ error: "User not found" }, { status: 404 }),
+    };
   }
 
   if (!canManageUsers(currentUser.role)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
+    return {
+      user: null,
+      error: Response.json({ error: "Forbidden" }, { status: 403 }),
+    };
   }
+
+  return { user: currentUser, error: null };
+}
+
+/* ===== GET（一覧） ===== */
+export async function GET() {
+  const { user: currentUser, error } = await getCurrentUser();
+  if (error || !currentUser) return error!;
 
   const users = await prisma.users.findMany({
     orderBy: { id: "asc" },
@@ -87,27 +115,15 @@ export async function GET() {
 
 /* ===== POST（作成） ===== */
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return Response.json({ error: "Not logged in" }, { status: 401 });
-  }
-
-  const currentUser = await prisma.users.findUnique({
-    where: { email: session.user.email },
-  });
-
-  if (!currentUser) {
-    return Response.json({ error: "User not found" }, { status: 404 });
-  }
-
-  if (!canManageUsers(currentUser.role)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const { user: currentUser, error } = await getCurrentUser();
+  if (error || !currentUser) return error!;
 
   const body = await req.json().catch(() => ({}));
 
-  if (!body.name || !body.email) {
+  const name = normalizeName(body.name);
+  const email = normalizeEmail(body.email);
+
+  if (!name || !email) {
     return Response.json(
       { error: "name and email are required" },
       { status: 400 }
@@ -117,13 +133,27 @@ export async function POST(req: Request) {
   const role: RoleValue = isValidRole(body.role) ? body.role : "USER";
 
   if (!canAssignRole(currentUser.role, role)) {
-    return Response.json({ error: "You cannot assign that role" }, { status: 403 });
+    return Response.json(
+      { error: "You cannot assign that role" },
+      { status: 403 }
+    );
+  }
+
+  const existingUser = await prisma.users.findUnique({
+    where: { email },
+  });
+
+  if (existingUser) {
+    return Response.json(
+      { error: "Email already exists" },
+      { status: 409 }
+    );
   }
 
   const user = await prisma.users.create({
     data: {
-      name: body.name,
-      email: body.email,
+      name,
+      email,
       password: body.password || "1234",
       role,
       teamId: null,
@@ -159,23 +189,8 @@ export async function POST(req: Request) {
 
 /* ===== PATCH（権限変更・所属変更） ===== */
 export async function PATCH(req: Request) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return Response.json({ error: "Not logged in" }, { status: 401 });
-  }
-
-  const currentUser = await prisma.users.findUnique({
-    where: { email: session.user.email },
-  });
-
-  if (!currentUser) {
-    return Response.json({ error: "User not found" }, { status: 404 });
-  }
-
-  if (!canManageUsers(currentUser.role)) {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const { user: currentUser, error } = await getCurrentUser();
+  if (error || !currentUser) return error!;
 
   const body = await req.json().catch(() => ({}));
 
@@ -191,6 +206,13 @@ export async function PATCH(req: Request) {
     return Response.json({ error: "Target user not found" }, { status: 404 });
   }
 
+  if (!canEditTarget(currentUser.role, targetUser.role)) {
+    return Response.json(
+      { error: "You cannot edit that user" },
+      { status: 403 }
+    );
+  }
+
   const data: {
     role?: RoleValue;
     teamId?: number | null;
@@ -203,7 +225,10 @@ export async function PATCH(req: Request) {
     }
 
     if (!canAssignRole(currentUser.role, body.role)) {
-      return Response.json({ error: "You cannot assign that role" }, { status: 403 });
+      return Response.json(
+        { error: "You cannot assign that role" },
+        { status: 403 }
+      );
     }
 
     data.role = body.role;

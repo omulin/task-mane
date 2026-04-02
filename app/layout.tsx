@@ -1,9 +1,16 @@
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Providers from "./providers";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "App",
   description: "Generated",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -14,9 +21,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body>
-        <Providers>
-          {children}
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

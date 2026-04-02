@@ -12,8 +12,10 @@ export async function GET() {
     );
   }
 
+  const email = session.user.email.trim().toLowerCase();
+
   const existingUser = await prisma.users.findUnique({
-    where: { email: session.user.email },
+    where: { email },
     select: {
       id: true,
       name: true,
@@ -28,8 +30,8 @@ export async function GET() {
 
   const createdUser = await prisma.users.create({
     data: {
-      name: session.user.name || session.user.email.split("@")[0] || "no-name",
-      email: session.user.email,
+      name: session.user.name?.trim() || email.split("@")[0] || "no-name",
+      email,
       password: "google",
       role: "USER",
     },

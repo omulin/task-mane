@@ -247,6 +247,8 @@ export default function Home() {
     text: string;
   } | null>(null);
 
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => {
@@ -254,6 +256,22 @@ export default function Home() {
     }, 2200);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && scheduleView === "gantt") {
+      setScheduleView("calendar");
+    }
+  }, [isMobile, scheduleView]);
 
   const showNotice = (text: string, type: NoticeType = "success") => {
     setNotice({ text, type });
@@ -1679,17 +1697,17 @@ export default function Home() {
           {rowLabel}
         </div>
 
-        <div style={{ display: "flex", marginBottom: 8 }}>
-          <div style={{ width: 88 }} />
+        <div style={{ display: "flex", marginBottom: 8, minWidth: isMobile ? 560 : 0 }}>
+          <div style={{ width: 88, flexShrink: 0 }} />
           {weekDates.map((date) => (
-            <div key={formatDateKey(date)} style={{ flex: 1, textAlign: "center" }}>
+            <div key={formatDateKey(date)} style={{ flex: 1, textAlign: "center", minWidth: 64 }}>
               <div style={{ fontSize: 11 }}>{weekdayLabels[date.getDay()]}</div>
               <div style={{ fontSize: 10, color: "#666" }}>{formatMonthDay(date)}</div>
             </div>
           ))}
         </div>
 
-        <div style={{ display: "grid", gap: 6 }}>
+        <div style={{ display: "grid", gap: 6, minWidth: isMobile ? 560 : 0 }}>
           {filteredTaskBase.map((task) => {
             if (!task.startDate || !task.endDate) return null;
 
@@ -1726,6 +1744,7 @@ export default function Home() {
                     overflow: "hidden",
                     whiteSpace: "nowrap",
                     textOverflow: "ellipsis",
+                    flexShrink: 0,
                   }}
                 >
                   {task.title}
@@ -1752,16 +1771,76 @@ export default function Home() {
     );
   };
 
+  const sectionStyle = (desktopHeight: string) => ({
+    display: "flex",
+    flexDirection: isMobile ? "column" : "row",
+    gap: 12,
+    height: isMobile ? "auto" : desktopHeight,
+  });
+
+  const responsiveCardStyle = (desktopFlex: number, extra?: Record<string, unknown>) => ({
+    flex: isMobile ? "unset" : desktopFlex,
+    minWidth: 0,
+    width: isMobile ? "100%" : undefined,
+    ...extra,
+  });
+
+  const bottomCardStyle = {
+    height: isMobile ? "auto" : "30%",
+    minHeight: isMobile ? 220 : 0,
+    overflowY: "auto" as const,
+  };
+
+  const tabsWrapStyle = {
+    display: "flex",
+    gap: 8,
+    flexWrap: isMobile ? "wrap" as const : "nowrap" as const,
+  };
+
+  const clickableTabStyle = {
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+    minWidth: isMobile ? 84 : undefined,
+    textAlign: "center" as const,
+  };
+
+  const taskFilterGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+    gap: 8,
+  };
+
+  const authButtonStyle = {
+    width: "100%",
+    minHeight: 56,
+    position: "relative" as const,
+    zIndex: 2,
+    touchAction: "manipulation" as const,
+  };
+
+  const scheduleNavStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobile
+      ? "repeat(3, minmax(0, 1fr))"
+      : "80px 1fr 80px 80px 80px",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 10,
+  };
+
   return (
     <div
       className="container"
       style={{
-        height: "100vh",
-        overflow: "hidden",
+        height: isMobile ? "auto" : "100vh",
+        minHeight: "100vh",
+        overflow: isMobile ? "auto" : "hidden",
         display: "flex",
         flexDirection: "column",
         gap: 12,
         position: "relative",
+        paddingBottom: isMobile ? 16 : 0,
       }}
     >
       {notice && (
@@ -1784,27 +1863,51 @@ export default function Home() {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, height: "35%" }}>
-        <div className="card" style={{ flex: 1 }}>
+      <div style={sectionStyle("35%")}>
+        <div className="card" style={responsiveCardStyle(1)}>
           <div className="card-title">支援管理システム</div>
 
-          <div className="tabs">
-            <div className={`tab ${!isManagementUser ? "active" : ""}`}>利用者</div>
-            <div className={`tab ${isManagementUser ? "active" : ""}`}>管理者</div>
+          <div className="tabs" style={tabsWrapStyle}>
+            <div
+              className={`tab ${!isManagementUser ? "active" : ""}`}
+              style={{
+                whiteSpace: "nowrap",
+                minWidth: isMobile ? 84 : undefined,
+                textAlign: "center",
+              }}
+            >
+              利用者
+            </div>
+            <div
+              className={`tab ${isManagementUser ? "active" : ""}`}
+              style={{
+                whiteSpace: "nowrap",
+                minWidth: isMobile ? 84 : undefined,
+                textAlign: "center",
+              }}
+            >
+              管理者
+            </div>
           </div>
 
           {isManagementUser && (
-            <div className="tabs" style={{ marginBottom: 8 }}>
+            <div className="tabs" style={{ ...tabsWrapStyle, marginBottom: 8 }}>
               <div
                 className={`tab ${staffView === "tasks" ? "active" : ""}`}
-                style={{ cursor: "pointer" }}
+                style={{
+                  ...clickableTabStyle,
+                  minWidth: isMobile ? 96 : undefined,
+                }}
                 onClick={() => setStaffView("tasks")}
               >
                 タスク管理
               </div>
               <div
                 className={`tab ${staffView === "users" ? "active" : ""}`}
-                style={{ cursor: "pointer" }}
+                style={{
+                  ...clickableTabStyle,
+                  minWidth: isMobile ? 96 : undefined,
+                }}
                 onClick={() => setStaffView("users")}
               >
                 利用者管理
@@ -1813,7 +1916,11 @@ export default function Home() {
           )}
 
           {!session ? (
-            <button className="button" onClick={() => signIn("google")}>
+            <button
+              className="button"
+              style={authButtonStyle}
+              onClick={() => signIn("google")}
+            >
               Googleでログイン
             </button>
           ) : (
@@ -1822,7 +1929,13 @@ export default function Home() {
                 {currentUser.name ?? session.user?.name ?? "no-name"}
               </div>
 
-              <div style={{ fontSize: 12, marginBottom: 8 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  marginBottom: 8,
+                  wordBreak: "break-all",
+                }}
+              >
                 {currentUser.email ?? session.user?.email}
               </div>
 
@@ -1839,7 +1952,11 @@ export default function Home() {
                 権限：{currentUser.role ?? "USER"}
               </div>
 
-              <button className="button" onClick={() => signOut()}>
+              <button
+                className="button"
+                style={authButtonStyle}
+                onClick={() => signOut()}
+              >
                 ログアウト
               </button>
             </>
@@ -1850,16 +1967,19 @@ export default function Home() {
           <>
             <div
               className="card"
-              style={{
-                flex: 2,
+              style={responsiveCardStyle(2, {
                 display: "flex",
                 flexDirection: "column",
                 overflowY: "auto",
-              }}
+              })}
             >
-              <div className="tabs">
-                <div className="tab active">利用者・チーム追加</div>
-                <div className="tab">所属管理</div>
+              <div className="tabs" style={tabsWrapStyle}>
+                <div className="tab active" style={{ whiteSpace: "nowrap" }}>
+                  利用者・チーム追加
+                </div>
+                <div className="tab" style={{ whiteSpace: "nowrap" }}>
+                  所属管理
+                </div>
               </div>
 
               <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
@@ -1960,7 +2080,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="card" style={{ flex: 1 }}>
+            <div className="card" style={responsiveCardStyle(1)}>
               <div className="card-title">チームダッシュボード</div>
 
               <div style={{ fontSize: 20, fontWeight: "bold" }}>{totalUsers}人</div>
@@ -1993,21 +2113,25 @@ export default function Home() {
           <>
             <div
               className="card"
-              style={{ flex: 2, display: "flex", flexDirection: "column", overflow: "hidden" }}
+              style={responsiveCardStyle(2, {
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+              })}
             >
               <div className="card-title">タスク管理</div>
 
-              <div className="tabs" style={{ marginBottom: 8 }}>
+              <div className="tabs" style={{ ...tabsWrapStyle, marginBottom: 8 }}>
                 <div
                   className={`tab ${taskPanelView === "create" ? "active" : ""}`}
-                  style={{ cursor: "pointer" }}
+                  style={clickableTabStyle}
                   onClick={() => setTaskPanelView("create")}
                 >
                   追加
                 </div>
                 <div
                   className={`tab ${taskPanelView === "manage" ? "active" : ""}`}
-                  style={{ cursor: "pointer" }}
+                  style={clickableTabStyle}
                   onClick={() => setTaskPanelView("manage")}
                 >
                   管理
@@ -2069,7 +2193,7 @@ export default function Home() {
                         value={newStart}
                         onChange={(e) => setNewStart(e.target.value)}
                       />
-                      <span style={{ fontSize: 12, color: "#666" }}>〜</span>
+                      <span style={{ fontSize: 12, color: "#666", textAlign: "center" }}>〜</span>
                       <input
                         type="date"
                         value={newEnd}
@@ -2080,7 +2204,9 @@ export default function Home() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                        gridTemplateColumns: isMobile
+                          ? "minmax(0, 1fr)"
+                          : "minmax(0, 1fr) auto auto",
                         gap: 6,
                         alignItems: "center",
                       }}
@@ -2094,7 +2220,11 @@ export default function Home() {
                       />
 
                       <button
-                        style={compactSubtleButtonStyle}
+                        style={{
+                          ...compactSubtleButtonStyle,
+                          width: isMobile ? "100%" : undefined,
+                          minHeight: isMobile ? 42 : undefined,
+                        }}
                         onClick={() => setShowCreateLabelSuggestions((prev) => !prev)}
                       >
                         {showCreateLabelSuggestions ? "閉じる" : "候補"}
@@ -2105,7 +2235,7 @@ export default function Home() {
                         value={newTaskColor}
                         onChange={(e) => setNewTaskColor(e.target.value)}
                         style={{
-                          width: 36,
+                          width: isMobile ? "100%" : 36,
                           height: 34,
                           border: "none",
                           background: "transparent",
@@ -2140,7 +2270,11 @@ export default function Home() {
                       )}
                   </div>
 
-                  <button className="button" onClick={createTask}>
+                  <button
+                    className="button"
+                    style={{ width: "100%", minHeight: 48 }}
+                    onClick={createTask}
+                  >
                     追加
                   </button>
                 </div>
@@ -2167,6 +2301,8 @@ export default function Home() {
                             : "1px solid #d1d5db",
                         color: activeTaskFilterCount > 0 ? "#1d4ed8" : "#111827",
                         fontWeight: activeTaskFilterCount > 0 ? 700 : 400,
+                        width: isMobile ? "100%" : undefined,
+                        minHeight: isMobile ? 42 : undefined,
                       }}
                       onClick={() => setShowTaskFilters((prev) => !prev)}
                     >
@@ -2175,20 +2311,21 @@ export default function Home() {
                     </button>
 
                     {activeTaskFilterCount > 0 && (
-                      <button style={subtleButtonStyle} onClick={resetTaskFilters}>
+                      <button
+                        style={{
+                          ...subtleButtonStyle,
+                          width: isMobile ? "100%" : undefined,
+                          minHeight: isMobile ? 42 : undefined,
+                        }}
+                        onClick={resetTaskFilters}
+                      >
                         リセット
                       </button>
                     )}
                   </div>
 
                   {(showTaskFilters || activeTaskFilterCount > 0) && (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                        gap: 8,
-                      }}
-                    >
+                    <div style={taskFilterGridStyle}>
                       <input
                         className="input"
                         placeholder="キーワード検索"
@@ -2307,7 +2444,7 @@ export default function Home() {
                       {filteredSuggestedLabelsForSearch.length > 0 && (
                         <div
                           style={{
-                            gridColumn: "1 / -1",
+                            gridColumn: isMobile ? "auto" : "1 / -1",
                             display: "flex",
                             flexWrap: "wrap",
                             gap: 6,
@@ -2351,7 +2488,9 @@ export default function Home() {
                             <div
                               style={{
                                 display: "grid",
-                                gridTemplateColumns: "minmax(0, 1fr) 110px",
+                                gridTemplateColumns: isMobile
+                                  ? "1fr"
+                                  : "minmax(0, 1fr) 110px",
                                 gap: 8,
                                 alignItems: "center",
                               }}
@@ -2421,7 +2560,7 @@ export default function Home() {
                                   handleTaskLocalChange(task.id, { label: e.target.value })
                                 }
                                 style={{
-                                  width: 120,
+                                  width: isMobile ? "100%" : 120,
                                   marginBottom: 0,
                                 }}
                               />
@@ -2433,7 +2572,7 @@ export default function Home() {
                                   handleTaskLocalChange(task.id, { color: e.target.value })
                                 }
                                 style={{
-                                  width: 34,
+                                  width: isMobile ? "100%" : 34,
                                   height: 34,
                                   border: "none",
                                   background: "transparent",
@@ -2449,7 +2588,10 @@ export default function Home() {
                                       assigneeId: Number(e.target.value),
                                     })
                                   }
-                                  style={{ maxWidth: 140 }}
+                                  style={{
+                                    maxWidth: isMobile ? "100%" : 140,
+                                    width: isMobile ? "100%" : undefined,
+                                  }}
                                 >
                                   {usersList.map((user) => (
                                     <option key={user.id} value={user.id}>
@@ -2464,14 +2606,22 @@ export default function Home() {
                               )}
 
                               <button
-                                style={compactActionButtonStyle}
+                                style={{
+                                  ...compactActionButtonStyle,
+                                  width: isMobile ? "100%" : undefined,
+                                  minHeight: isMobile ? 42 : undefined,
+                                }}
                                 onClick={() => saveTask(task)}
                               >
                                 保存
                               </button>
 
                               <button
-                                style={compactSubtleButtonStyle}
+                                style={{
+                                  ...compactSubtleButtonStyle,
+                                  width: isMobile ? "100%" : undefined,
+                                  minHeight: isMobile ? 42 : undefined,
+                                }}
                                 onClick={() => deleteTask(task.id)}
                               >
                                 削除
@@ -2507,7 +2657,7 @@ export default function Home() {
               )}
             </div>
 
-            <div className="card" style={{ flex: 1 }}>
+            <div className="card" style={responsiveCardStyle(1)}>
               <div className="card-title">ダッシュボード</div>
 
               <div style={{ fontSize: 20, fontWeight: "bold" }}>{progress}%</div>
@@ -2538,8 +2688,13 @@ export default function Home() {
       </div>
 
       {isStaffUsersView ? (
-        <div style={{ display: "flex", gap: 12, height: "35%" }}>
-          <div className="card" style={{ flex: 3, overflowY: "auto" }}>
+        <div style={sectionStyle("35%")}>
+          <div
+            className="card"
+            style={responsiveCardStyle(3, {
+              overflowY: "auto",
+            })}
+          >
             <div className="card-title">利用者一覧</div>
 
             <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
@@ -2555,7 +2710,7 @@ export default function Home() {
                   className="input"
                   value={userRoleFilter}
                   onChange={(e) => setUserRoleFilter(e.target.value)}
-                  style={{ maxWidth: 150 }}
+                  style={{ maxWidth: isMobile ? "100%" : 150, width: isMobile ? "100%" : undefined }}
                 >
                   <option value="all">全role</option>
                   <option value="USER">USER</option>
@@ -2570,7 +2725,7 @@ export default function Home() {
                   className="input"
                   value={userTeamFilter}
                   onChange={(e) => setUserTeamFilter(e.target.value)}
-                  style={{ maxWidth: 170 }}
+                  style={{ maxWidth: isMobile ? "100%" : 170, width: isMobile ? "100%" : undefined }}
                 >
                   <option value="all">全チーム</option>
                   <option value="__unassigned__">未所属のみ</option>
@@ -2585,7 +2740,7 @@ export default function Home() {
                   className="input"
                   value={userSubTeamFilter}
                   onChange={(e) => setUserSubTeamFilter(e.target.value)}
-                  style={{ maxWidth: 180 }}
+                  style={{ maxWidth: isMobile ? "100%" : 180, width: isMobile ? "100%" : undefined }}
                 >
                   <option value="all">全サブチーム</option>
                   <option value="__unassigned__">未所属のみ</option>
@@ -2640,7 +2795,9 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div style={{ fontSize: 12, color: "#666" }}>{user.email}</div>
+                    <div style={{ fontSize: 12, color: "#666", wordBreak: "break-all" }}>
+                      {user.email}
+                    </div>
 
                     <div style={{ fontSize: 12, color: "#444" }}>
                       {user.team?.name ?? "未所属"} / {user.subTeam?.name ?? "未所属"}
@@ -2658,7 +2815,7 @@ export default function Home() {
                         className="input"
                         value={user.role}
                         onChange={(e) => handleRoleSelectChange(user.id, e.target.value)}
-                        style={{ maxWidth: 140 }}
+                        style={{ maxWidth: isMobile ? "100%" : 140, width: isMobile ? "100%" : undefined }}
                       >
                         <option value="USER">USER</option>
                         <option value="STAFF">STAFF</option>
@@ -2670,6 +2827,7 @@ export default function Home() {
 
                       <button
                         className="button"
+                        style={{ width: isMobile ? "100%" : undefined, minHeight: isMobile ? 44 : undefined }}
                         onClick={() => updateUserRole(user.id, user.role)}
                       >
                         権限更新
@@ -2679,7 +2837,7 @@ export default function Home() {
                         className="input"
                         value={user.teamId ?? ""}
                         onChange={(e) => handleUserTeamChange(user.id, e.target.value)}
-                        style={{ maxWidth: 150 }}
+                        style={{ maxWidth: isMobile ? "100%" : 150, width: isMobile ? "100%" : undefined }}
                       >
                         <option value="">チーム未所属</option>
                         {teamsList.map((team) => (
@@ -2693,7 +2851,7 @@ export default function Home() {
                         className="input"
                         value={user.subTeamId ?? ""}
                         onChange={(e) => handleUserSubTeamChange(user.id, e.target.value)}
-                        style={{ maxWidth: 160 }}
+                        style={{ maxWidth: isMobile ? "100%" : 160, width: isMobile ? "100%" : undefined }}
                         disabled={!user.teamId}
                       >
                         <option value="">サブチーム未所属</option>
@@ -2706,6 +2864,7 @@ export default function Home() {
 
                       <button
                         className="button"
+                        style={{ width: isMobile ? "100%" : undefined, minHeight: isMobile ? 44 : undefined }}
                         onClick={() =>
                           updateUserAssignment(
                             user.id,
@@ -2723,7 +2882,12 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="card" style={{ flex: 2, overflowY: "auto" }}>
+          <div
+            className="card"
+            style={responsiveCardStyle(2, {
+              overflowY: "auto",
+            })}
+          >
             <div className="card-title">チーム / サブチーム管理</div>
 
             <div style={{ marginBottom: 16 }}>
@@ -2739,9 +2903,16 @@ export default function Home() {
                         className="input"
                         value={team.name}
                         onChange={(e) => handleTeamLocalChange(team.id, e.target.value)}
-                        style={{ maxWidth: 180 }}
+                        style={{ maxWidth: isMobile ? "100%" : 180, width: isMobile ? "100%" : undefined }}
                       />
-                      <button style={actionButtonStyle} onClick={() => saveTeamName(team)}>
+                      <button
+                        style={{
+                          ...actionButtonStyle,
+                          width: isMobile ? "100%" : undefined,
+                          minHeight: isMobile ? 42 : undefined,
+                        }}
+                        onClick={() => saveTeamName(team)}
+                      >
                         名前更新
                       </button>
                     </div>
@@ -2766,9 +2937,16 @@ export default function Home() {
                         className="input"
                         value={subTeam.name}
                         onChange={(e) => handleSubTeamLocalChange(subTeam.id, e.target.value)}
-                        style={{ maxWidth: 180 }}
+                        style={{ maxWidth: isMobile ? "100%" : 180, width: isMobile ? "100%" : undefined }}
                       />
-                      <button style={actionButtonStyle} onClick={() => saveSubTeamName(subTeam)}>
+                      <button
+                        style={{
+                          ...actionButtonStyle,
+                          width: isMobile ? "100%" : undefined,
+                          minHeight: isMobile ? 42 : undefined,
+                        }}
+                        onClick={() => saveSubTeamName(subTeam)}
+                      >
                         名前更新
                       </button>
                     </div>
@@ -2782,8 +2960,13 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", gap: 12, height: "35%" }}>
-          <div className="card" style={{ flex: 1, overflowY: "auto" }}>
+        <div style={sectionStyle("35%")}>
+          <div
+            className="card"
+            style={responsiveCardStyle(1, {
+              overflowY: "auto",
+            })}
+          >
             <div className="card-title">今日のタスク</div>
 
             {isManagementUser && (
@@ -2877,7 +3060,11 @@ export default function Home() {
 
           <div
             className="card"
-            style={{ flex: 2, display: "flex", flexDirection: "column", overflow: "hidden" }}
+            style={responsiveCardStyle(2, {
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            })}
           >
             <div className="card-title">ボード</div>
 
@@ -2911,7 +3098,7 @@ export default function Home() {
                     自分担当のみ
                   </label>
 
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: isMobile ? "100%" : undefined }}>
                     <button
                       style={{
                         ...subtleButtonStyle,
@@ -2919,6 +3106,8 @@ export default function Home() {
                         border: activeBoardFilterCount > 0 ? "1px solid #60a5fa" : "1px solid #d1d5db",
                         color: activeBoardFilterCount > 0 ? "#1d4ed8" : "#111827",
                         fontWeight: activeBoardFilterCount > 0 ? 700 : 400,
+                        width: isMobile ? "100%" : undefined,
+                        minHeight: isMobile ? 42 : undefined,
                       }}
                       onClick={() => setShowBoardFilters((prev) => !prev)}
                     >
@@ -2927,7 +3116,14 @@ export default function Home() {
                     </button>
 
                     {activeBoardFilterCount > 0 && (
-                      <button style={subtleButtonStyle} onClick={resetBoardFilters}>
+                      <button
+                        style={{
+                          ...subtleButtonStyle,
+                          width: isMobile ? "100%" : undefined,
+                          minHeight: isMobile ? 42 : undefined,
+                        }}
+                        onClick={resetBoardFilters}
+                      >
                         リセット
                       </button>
                     )}
@@ -2964,13 +3160,7 @@ export default function Home() {
                 )}
 
                 {(showBoardFilters || activeBoardFilterCount > 0) && (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      gap: 8,
-                    }}
-                  >
+                  <div style={taskFilterGridStyle}>
                     <select
                       className="input"
                       value={boardAssigneeFilter}
@@ -3036,7 +3226,9 @@ export default function Home() {
                 flex: 1,
                 overflow: "auto",
                 display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(170px, 1fr))",
+                gridTemplateColumns: isMobile
+                  ? "minmax(0, 1fr)"
+                  : "repeat(3, minmax(170px, 1fr))",
                 gap: 10,
                 alignItems: "start",
               }}
@@ -3101,18 +3293,23 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="card" style={{ flex: 3, overflowY: "auto" }}>
-            <div className="tabs">
+          <div
+            className="card"
+            style={responsiveCardStyle(3, {
+              overflowY: "auto",
+            })}
+          >
+            <div className="tabs" style={tabsWrapStyle}>
               <div
                 className={`tab ${scheduleView === "gantt" ? "active" : ""}`}
-                style={{ cursor: "pointer" }}
+                style={clickableTabStyle}
                 onClick={() => setScheduleView("gantt")}
               >
                 ガント
               </div>
               <div
                 className={`tab ${scheduleView === "calendar" ? "active" : ""}`}
-                style={{ cursor: "pointer" }}
+                style={clickableTabStyle}
                 onClick={() => setScheduleView("calendar")}
               >
                 カレンダー
@@ -3121,23 +3318,22 @@ export default function Home() {
 
             {scheduleView === "gantt" ? (
               <>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "80px 1fr 80px 80px 80px",
-                    alignItems: "center",
-                    gap: 8,
-                    marginTop: 10,
-                    marginBottom: 10,
-                  }}
-                >
+                <div style={scheduleNavStyle}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      fontWeight: "bold",
+                      fontSize: 13,
+                      gridColumn: isMobile ? "1 / -1" : "auto",
+                      order: isMobile ? -1 : 0,
+                    }}
+                  >
+                    {ganttRangeLabel}
+                  </div>
+
                   <button style={navButtonStyle} onClick={() => setWeekOffset((prev) => prev - 1)}>
                     前週
                   </button>
-
-                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13 }}>
-                    {ganttRangeLabel}
-                  </div>
 
                   <button style={navButtonStyle} onClick={() => setWeekOffset(0)}>
                     今週
@@ -3147,35 +3343,36 @@ export default function Home() {
                     次週
                   </button>
 
-                  <div />
+                  {!isMobile && <div />}
                 </div>
 
                 <div className="card-title" style={{ marginTop: 4 }}>
                   ガント（2週間）
                 </div>
 
-                {renderGanttWeek(firstWeekDates, "1週目")}
-                {renderGanttWeek(secondWeekDates, "2週目")}
+                <div style={{ overflowX: "auto" }}>
+                  {renderGanttWeek(firstWeekDates, "1週目")}
+                  {renderGanttWeek(secondWeekDates, "2週目")}
+                </div>
               </>
             ) : (
               <>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "80px 1fr 80px 80px 80px",
-                    alignItems: "center",
-                    gap: 8,
-                    marginTop: 10,
-                    marginBottom: 10,
-                  }}
-                >
+                <div style={scheduleNavStyle}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      fontWeight: "bold",
+                      fontSize: 13,
+                      gridColumn: isMobile ? "1 / -1" : "auto",
+                      order: isMobile ? -1 : 0,
+                    }}
+                  >
+                    {monthLabel}
+                  </div>
+
                   <button style={navButtonStyle} onClick={() => setMonthOffset((prev) => prev - 1)}>
                     前月
                   </button>
-
-                  <div style={{ textAlign: "center", fontWeight: "bold", fontSize: 13 }}>
-                    {monthLabel}
-                  </div>
 
                   <button style={navButtonStyle} onClick={() => setMonthOffset(0)}>
                     今月
@@ -3185,7 +3382,7 @@ export default function Home() {
                     次月
                   </button>
 
-                  <div />
+                  {!isMobile && <div />}
                 </div>
 
                 <div className="card-title" style={{ marginTop: 4 }}>
@@ -3199,6 +3396,7 @@ export default function Home() {
                     gap: 4,
                     marginTop: 8,
                     marginBottom: 6,
+                    minWidth: isMobile ? 560 : 0,
                   }}
                 >
                   {weekdayLabels.map((day) => (
@@ -3208,74 +3406,77 @@ export default function Home() {
                   ))}
                 </div>
 
-                <div style={{ display: "grid", gap: 4 }}>
-                  {calendarRows.map((row, rowIndex) => (
-                    <div
-                      key={rowIndex}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(7, 1fr)",
-                        gap: 4,
-                      }}
-                    >
-                      {row.map((date) => {
-                        const isCurrentMonth = date.getMonth() === monthStart.getMonth();
-                        const isToday = formatDateKey(date) === actualTodayStr;
-                        const dayTasks = filteredTaskBase.filter((t) => isTaskOnDate(t, date));
+                <div style={{ display: "grid", gap: 4, overflowX: "auto" }}>
+                  <div style={{ minWidth: isMobile ? 560 : 0 }}>
+                    {calendarRows.map((row, rowIndex) => (
+                      <div
+                        key={rowIndex}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(7, 1fr)",
+                          gap: 4,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {row.map((date) => {
+                          const isCurrentMonth = date.getMonth() === monthStart.getMonth();
+                          const isToday = formatDateKey(date) === actualTodayStr;
+                          const dayTasks = filteredTaskBase.filter((t) => isTaskOnDate(t, date));
 
-                        return (
-                          <div
-                            key={formatDateKey(date)}
-                            style={{
-                              minHeight: 88,
-                              border: "1px solid #eee",
-                              borderRadius: 8,
-                              padding: 6,
-                              background: isCurrentMonth ? "#fff" : "#f7f7f7",
-                              opacity: isCurrentMonth ? 1 : 0.7,
-                            }}
-                          >
+                          return (
                             <div
+                              key={formatDateKey(date)}
                               style={{
-                                fontSize: 11,
-                                fontWeight: "bold",
-                                color: isToday ? "#2563eb" : "#333",
-                                marginBottom: 4,
+                                minHeight: 88,
+                                border: "1px solid #eee",
+                                borderRadius: 8,
+                                padding: 6,
+                                background: isCurrentMonth ? "#fff" : "#f7f7f7",
+                                opacity: isCurrentMonth ? 1 : 0.7,
                               }}
                             >
-                              {date.getDate()}
-                            </div>
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: "bold",
+                                  color: isToday ? "#2563eb" : "#333",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                {date.getDate()}
+                              </div>
 
-                            <div style={{ display: "grid", gap: 4 }}>
-                              {dayTasks.slice(0, 3).map((task) => (
-                                <div
-                                  key={`${task.id}-${formatDateKey(date)}`}
-                                  style={{
-                                    fontSize: 10,
-                                    padding: "3px 5px",
-                                    borderRadius: 6,
-                                    borderLeft: `4px solid ${task.color || "#4a90e2"}`,
-                                    background: "#f3f4f6",
-                                    overflow: "hidden",
-                                    whiteSpace: "nowrap",
-                                    textOverflow: "ellipsis",
-                                  }}
-                                >
-                                  {task.title}
-                                </div>
-                              ))}
+                              <div style={{ display: "grid", gap: 4 }}>
+                                {dayTasks.slice(0, 3).map((task) => (
+                                  <div
+                                    key={`${task.id}-${formatDateKey(date)}`}
+                                    style={{
+                                      fontSize: 10,
+                                      padding: "3px 5px",
+                                      borderRadius: 6,
+                                      borderLeft: `4px solid ${task.color || "#4a90e2"}`,
+                                      background: "#f3f4f6",
+                                      overflow: "hidden",
+                                      whiteSpace: "nowrap",
+                                      textOverflow: "ellipsis",
+                                    }}
+                                  >
+                                    {task.title}
+                                  </div>
+                                ))}
 
-                              {dayTasks.length > 3 && (
-                                <div style={{ fontSize: 10, color: "#666" }}>
-                                  +{dayTasks.length - 3}件
-                                </div>
-                              )}
+                                {dayTasks.length > 3 && (
+                                  <div style={{ fontSize: 10, color: "#666" }}>
+                                    +{dayTasks.length - 3}件
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </>
             )}
@@ -3284,7 +3485,7 @@ export default function Home() {
       )}
 
       {isStaffUsersView ? (
-        <div className="card" style={{ height: "30%", overflowY: "auto" }}>
+        <div className="card" style={bottomCardStyle}>
           <div className="card-title">登録済みユーザー詳細</div>
 
           {usersList.length === 0 && (
@@ -3305,7 +3506,7 @@ export default function Home() {
                 <div style={{ fontWeight: "bold" }}>
                   ID: {user.id} / {user.name}
                 </div>
-                <div style={{ fontSize: 12, color: "#666" }}>{user.email}</div>
+                <div style={{ fontSize: 12, color: "#666", wordBreak: "break-all" }}>{user.email}</div>
                 <div style={{ fontSize: 12, color: "#444" }}>権限: {user.role}</div>
                 <div style={{ fontSize: 12, color: "#444" }}>
                   チーム: {user.team?.name ?? "未所属"}
@@ -3318,7 +3519,7 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        <div className="card" style={{ height: "30%", overflowY: "auto" }}>
+        <div className="card" style={bottomCardStyle}>
           <div className="card-title">過去の記録</div>
 
           <div
@@ -3335,7 +3536,7 @@ export default function Home() {
                 className="input"
                 value={historyTargetUserId}
                 onChange={(e) => setHistoryTargetUserId(e.target.value)}
-                style={{ maxWidth: 220 }}
+                style={{ maxWidth: isMobile ? "100%" : 220, width: isMobile ? "100%" : undefined }}
               >
                 <option value="all">全員</option>
                 {usersList.map((user) => (

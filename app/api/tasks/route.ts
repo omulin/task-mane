@@ -85,11 +85,14 @@ const taskInclude = {
   },
 } as const;
 
-export async function GET() {
+async function getCurrentUser() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.email) {
-    return Response.json([], { status: 401 });
+    return {
+      user: null,
+      error: Response.json({ error: "Not logged in" }, { status: 401 }),
+    };
   }
 
   const currentUser = await prisma.users.findUnique({
@@ -97,8 +100,18 @@ export async function GET() {
   });
 
   if (!currentUser) {
-    return Response.json([]);
+    return {
+      user: null,
+      error: Response.json({ error: "User not found" }, { status: 404 }),
+    };
   }
+
+  return { user: currentUser, error: null };
+}
+
+export async function GET() {
+  const { user: currentUser, error } = await getCurrentUser();
+  if (error || !currentUser) return error!;
 
   const tasks = canManageAllTasks(currentUser.role)
     ? await prisma.tasks.findMany({
@@ -119,26 +132,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
 
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return Response.json({ error: "Not logged in" }, { status: 401 });
-  }
-
-  let currentUser = await prisma.users.findUnique({
-    where: { email: session.user.email },
-  });
-
-  if (!currentUser) {
-    currentUser = await prisma.users.create({
-      data: {
-        name: session.user.name || "no-name",
-        email: session.user.email,
-        password: "google",
-        role: "USER",
-      },
-    });
-  }
+  const { user: currentUser, error } = await getCurrentUser();
+  if (error || !currentUser) return error!;
 
   const title = normalizeTitle(body.title);
   if (!title) {
@@ -212,19 +207,8 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const body = await req.json().catch(() => ({}));
 
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return Response.json({ error: "Not logged in" }, { status: 401 });
-  }
-
-  const currentUser = await prisma.users.findUnique({
-    where: { email: session.user.email },
-  });
-
-  if (!currentUser) {
-    return Response.json({ error: "User not found" }, { status: 404 });
-  }
+  const { user: currentUser, error } = await getCurrentUser();
+  if (error || !currentUser) return error!;
 
   const id = Number(body.id);
   if (Number.isNaN(id)) {
@@ -258,19 +242,8 @@ export async function DELETE(req: Request) {
 export async function PUT(req: Request) {
   const body = await req.json().catch(() => ({}));
 
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return Response.json({ error: "Not logged in" }, { status: 401 });
-  }
-
-  const currentUser = await prisma.users.findUnique({
-    where: { email: session.user.email },
-  });
-
-  if (!currentUser) {
-    return Response.json({ error: "User not found" }, { status: 404 });
-  }
+  const { user: currentUser, error } = await getCurrentUser();
+  if (error || !currentUser) return error!;
 
   const id = Number(body.id);
   if (Number.isNaN(id)) {
@@ -366,11 +339,9 @@ export async function PUT(req: Request) {
         data.completedAt = new Date();
         data.doneById = currentUser.id;
       }
-    } else {
-      if (task.status === "DONE") {
-        data.completedAt = null;
-        data.doneById = null;
-      }
+    } else if (task.status === "DONE") {
+      data.completedAt = null;
+      data.doneById = null;
     }
   }
 
